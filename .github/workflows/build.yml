@@ -24,12 +24,14 @@ jobs:
           mkdir -p "${{ github.workspace }}/ghostty-out/lib"
           mkdir -p "${{ github.workspace }}/ghostty-out/include"
           find zig-out -name "ghostty-internal.so" -exec cp {} \
-               "${{ github.workspace }}/ghostty-out/lib/libghostty-internal.so" \;
+               "${{ github.workspace }}/ghostty-out/lib/libghostty.so" \;
+          # Also keep static libs (for VT tests)
           find zig-out \( -name "ghostty-internal.a" -o -name "libghostty*.a" \) \
                -exec cp {} "${{ github.workspace }}/ghostty-out/lib/" \;
+          # Rename ghostty-internal.a for -lghostty linking
           if [ -f "${{ github.workspace }}/ghostty-out/lib/ghostty-internal.a" ]; then
             mv "${{ github.workspace }}/ghostty-out/lib/ghostty-internal.a" \
-               "${{ github.workspace }}/ghostty-out/lib/libghostty-internal.a"
+               "${{ github.workspace }}/ghostty-out/lib/libghostty.a"
           fi
           cp include/ghostty.h "${{ github.workspace }}/ghostty-out/include/"
           cp -r include/ghostty "${{ github.workspace }}/ghostty-out/include/"

@@ -119,7 +119,7 @@ ptyxis_include_directories = [
 
 ptyxis_link_args = [
   '-L' + ghty_libdir,
-  '-lghostty-internal',
+  '-lghostty',
   '-lxml2',
   '-Wl,-rpath,' + ghty_libdir,
 ]

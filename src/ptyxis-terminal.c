@@ -108,7 +108,7 @@ static const char * const url_regexes_str[] = {
 };
 
 /* Ghostty action callback dispatcher */
-static bool
+static void
 ptyxis_terminal_action_cb(ghostty_action_tag_e tag,
                           const ghostty_action_u *action,
                           gpointer user_data)
@@ -158,7 +158,7 @@ ptyxis_terminal_action_cb(ghostty_action_tag_e tag,
     case GHOSTTY_ACTION_CLOSE_WINDOW:
     case GHOSTTY_ACTION_CLOSE_TAB:
       /* Let tabs handle this */
-      return true;
+      break;
 
     case GHOSTTY_ACTION_RING_BELL:
       /* Visual bell handled by PtyxisTab */
@@ -171,8 +171,6 @@ ptyxis_terminal_action_cb(ghostty_action_tag_e tag,
     default:
       break;
     }
-
-  return false;
 }
 
 /* --- Color / Palette --- */
@@ -654,6 +652,11 @@ ptyxis_terminal_grid_size_changed_cb(PtyxisTerminal *self,
   self->n_rows = rows;
 }
 
+/* Forward declaration for paste async callback */
+static void paste_clipboard_action_cb(GObject *object,
+                                       GAsyncResult *result,
+                                       gpointer user_data);
+
 /* --- Snapshot (for GtkScreenshot compatibility) --- */
 
 static void
@@ -661,11 +664,6 @@ ptyxis_terminal_snapshot(GtkWidget   *widget,
                          GtkSnapshot *snapshot)
 {
   /* Delegate to the ghostty widget's snapshot */
-  /* Forward declaration for paste callback */
-  static void paste_clipboard_action_cb(GObject *object,
-                                         GAsyncResult *result,
-                                         gpointer user_data);
-
   GTK_WIDGET_CLASS(ptyxis_terminal_parent_class)->snapshot(widget, snapshot);
 }
 

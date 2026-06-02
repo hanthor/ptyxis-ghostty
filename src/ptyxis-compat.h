@@ -108,7 +108,7 @@ typedef enum {
 #define VTE_TERMPROP_CONTAINER_RUNTIME "container-runtime"
 
 /* Additional missing stubs */
-static inline char *ptyxis_terminal_update_custom_links_list(void *t) { (void)t; return NULL; }
+static inline char *ptyxis_terminal_update_custom_links_list(void *t, void *p) { (void)t; (void)p; return NULL; }
 static inline char *ptyxis_terminal_dup_current_file_uri(void *t) { (void)t; return NULL; }
 
 /* Stub functions for VTE terminal API */

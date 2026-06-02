@@ -23,6 +23,11 @@ jobs:
           mkdir -p "${{ github.workspace }}/ghostty-out/lib"
           mkdir -p "${{ github.workspace }}/ghostty-out/include"
           find zig-out \( -name "ghostty-internal.a" -o -name "libghostty*.a" \) -exec cp {} "${{ github.workspace }}/ghostty-out/lib/" \;
+          # Rename for -l linking: ghostty-internal.a -> libghostty-internal.a
+          if [ -f "${{ github.workspace }}/ghostty-out/lib/ghostty-internal.a" ]; then
+            mv "${{ github.workspace }}/ghostty-out/lib/ghostty-internal.a" \
+               "${{ github.workspace }}/ghostty-out/lib/libghostty-internal.a"
+          fi
           cp include/ghostty.h "${{ github.workspace }}/ghostty-out/include/"
           ls -la "${{ github.workspace }}/ghostty-out/lib/"
           echo "GHOSTTY_PREFIX=${{ github.workspace }}/ghostty-out" >> "$GITHUB_ENV"

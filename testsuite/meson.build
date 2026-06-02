@@ -19,15 +19,22 @@ agent_tests = {
   'test-podman' : {},
 }
 
-# Container flow tests (need main source files)
-container_tests = {
-  'test-container-flow' : {},
-}
-
 agent_test_deps = [
   ptyxis_agent_deps,
 ]
 
+# Container flow tests (link against main sources + agent IPC)
+container_tests = {
+  'test-container-flow' : {},
+}
+
+# Widget/Config tests (link against ghostty)
+widget_tests = {
+  'test-ghostty-widget' : {},
+  'test-ghostty-config' : {},
+}
+
+# --- Agent tests ---
 foreach test, params: agent_tests
   test_exe = executable(test,
     ['@0@.c'.format(test)] + ptyxis_agent_sources,
@@ -44,32 +51,23 @@ foreach test, params: agent_tests
   endif
 endforeach
 
-# Widget tests (link against ghostty and GTK)
-widget_tests = {
-  'test-ghostty-widget' : {},
-  'test-ghostty-config' : {},
-}
-
-container_test_deps = [
-  ptyxis_deps,
-  dependency('gio-unix-2.0', version: glib_req),
-]
-
+# --- Widget/Config tests ---
 widget_test_deps = [
   ptyxis_deps,
   dependency('gtk4', version: gtk_req),
 ]
 
-foreach test, params: container_tests
+foreach test, params: widget_tests
   test_exe = executable(test,
-    ['@0@.c'.format(test), '../src/ptyxis-client.c', '../src/ptyxis-application.c', '../src/ptyxis-profile.c', '../src/ptyxis-util.c'],
-                 c_args: testsuite_c_args,
-           dependencies: container_test_deps,
+    ['@0@.c'.format(test), '../src/ptyxis-ghostty-widget.c', '../src/ptyxis-ghostty-config.c'],
+                 c_args: testsuite_c_args + ['-DGHOSTTY_STATIC'],
+           dependencies: widget_test_deps,
+          link_args: ptyxis_link_args + ['-lstdc++'],
     include_directories: [
       include_directories('..'),
       include_directories('.'),
       include_directories('../src'),
-      include_directories('../agent'),
+      include_directories(ghty_include),
     ],
   )
   if not params.get('skip', false)
@@ -77,17 +75,22 @@ foreach test, params: container_tests
   endif
 endforeach
 
-foreach test, params: widget_tests
+# --- Container flow tests (need main sources + agent IPC) ---
+foreach test, params: container_tests
   test_exe = executable(test,
-    ['@0@.c'.format(test), '../src/ptyxis-ghostty-widget.c', '../src/ptyxis-ghostty-config.c'],
-                 c_args: testsuite_c_args + ['-DGHOSTTY_STATIC'],
-           dependencies: widget_test_deps,
-          link_args: ptyxis_link_args,
+    ['@0@.c'.format(test),
+     '../src/ptyxis-client.c',
+     '../src/ptyxis-application.c',
+     '../src/ptyxis-profile.c',
+     '../src/ptyxis-util.c'] + ptyxis_agent_ipc,
+                 c_args: testsuite_c_args,
+           dependencies: ptyxis_deps + [dependency('gio-unix-2.0', version: glib_req)],
+          link_args: ['-lstdc++'],
     include_directories: [
       include_directories('..'),
       include_directories('.'),
       include_directories('../src'),
-      include_directories(ghty_include),
+      include_directories('../agent'),
     ],
   )
   if not params.get('skip', false)

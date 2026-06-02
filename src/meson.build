@@ -121,7 +121,6 @@ ptyxis_link_args = [
   '-L' + ghty_libdir,
   '-lghostty-internal',
   '-lxml2',
-  '-L/usr/lib64', '-lstdc++',
 ]
 
 executable('ptyxis', ptyxis_sources + ptyxis_agent_ipc,
@@ -129,5 +128,6 @@ executable('ptyxis', ptyxis_sources + ptyxis_agent_ipc,
               install: true,
                c_args: ptyxis_c_args,
           link_args: ptyxis_link_args,
+        link_language: 'cpp',
   include_directories: ptyxis_include_directories,
 )

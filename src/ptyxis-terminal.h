@@ -34,6 +34,7 @@ guint           ptyxis_terminal_get_n_rows          (PtyxisTerminal *self);
 void            ptyxis_terminal_reset               (PtyxisTerminal *self,
                                                      gboolean        clear_screen);
 gboolean        ptyxis_terminal_get_scroll_on_keystroke(PtyxisTerminal *self);
+char           *ptyxis_terminal_dup_current_directory_uri(PtyxisTerminal *self);
 void            ptyxis_terminal_set_custom_link     (PtyxisTerminal  *self,
                                                      int              tag,
                                                      const char      *regex,

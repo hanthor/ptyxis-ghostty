@@ -1096,3 +1096,13 @@ ptyxis_terminal_set_custom_link(PtyxisTerminal  *self,
                       GINT_TO_POINTER(tag),
                       custom_link);
 }
+
+/* --- CWD tracking (TODO: wire to GHOSTTY_ACTION_PWD) --- */
+
+char *
+ptyxis_terminal_dup_current_directory_uri(PtyxisTerminal *self)
+{
+  g_return_val_if_fail(PTYXIS_IS_TERMINAL(self), NULL);
+  /* TODO: Track CWD via ghostty PWD action callback */
+  return NULL;
+}

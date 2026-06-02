@@ -45,6 +45,7 @@ jobs:
               meson gcc gettext desktop-file-utils appstream \
               glib2-devel gtk4-devel libadwaita-devel \
               json-glib-devel git pkgconf-pkg-config libportal-gtk4-devel \
+              libxml2-devel \
               xorg-x11-server-Xvfb &&
             meson setup builddir -Dghostty_prefix=/ghostty &&
             meson compile -C builddir &&

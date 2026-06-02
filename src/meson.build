@@ -120,6 +120,7 @@ ptyxis_include_directories = [
 ptyxis_link_args = [
   '-L' + ghty_libdir,
   '-lghostty-internal',
+  '-lxml2',
 ]
 
 executable('ptyxis', ptyxis_sources + ptyxis_agent_ipc,

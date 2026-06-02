@@ -90,3 +90,34 @@ foreach test, params: widget_tests
     test(test, test_exe, env: test_env)
   endif
 endforeach
+
+# --- Ghostty VT terminal behavior tests ---
+vt_tests = {
+  'test-ghostty-terminal' : {},
+}
+
+vt_test_link_args = [
+  '-L' + ghty_libdir,
+  '-l:libghostty-vt.a',
+]
+
+vt_test_deps = [
+  dependency('glib-2.0'),
+]
+
+foreach test, params: vt_tests
+  test_exe = executable(test,
+    ['@0@.c'.format(test)],
+                 c_args: testsuite_c_args,
+           dependencies: vt_test_deps,
+          link_args: vt_test_link_args,
+    include_directories: [
+      include_directories('..'),
+      include_directories('.'),
+      include_directories(ghty_include),
+    ],
+  )
+  if not params.get('skip', false)
+    test(test, test_exe, env: test_env)
+  endif
+endforeach

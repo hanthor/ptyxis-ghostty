@@ -18,12 +18,7 @@
   SPDX-License-Identifier: GPL-3.0-or-later
 -->
 <interface>
-  <template class="PtyxisTerminal" parent="VteTerminal">
-    <property name="pointer-autohide">true</property>
-    <property name="allow-hyperlink">true</property>
-    <property name="scroll-unit-is-pixels">true</property>
-    <property name="enable-fallback-scrolling">false</property>
-    <property name="enable-legacy-osc777">true</property>
+  <template class="PtyxisTerminal" parent="GtkWidget">
     <child>
       <object class="GtkShortcutController" id="shortcuts">
         <property name="propagation-phase">capture</property>

@@ -30,6 +30,7 @@ jobs:
                "${{ github.workspace }}/ghostty-out/lib/libghostty-internal.a"
           fi
           cp include/ghostty.h "${{ github.workspace }}/ghostty-out/include/"
+          cp -r include/ghostty "${{ github.workspace }}/ghostty-out/include/"
           ls -la "${{ github.workspace }}/ghostty-out/lib/"
           echo "GHOSTTY_PREFIX=${{ github.workspace }}/ghostty-out" >> "$GITHUB_ENV"
 
@@ -96,6 +97,7 @@ jobs:
                "${{ github.workspace }}/ghostty-out/lib/libghostty-internal.a"
           fi
           cp include/ghostty.h "${{ github.workspace }}/ghostty-out/include/"
+          cp -r include/ghostty "${{ github.workspace }}/ghostty-out/include/"
           ls -la "${{ github.workspace }}/ghostty-out/lib/"
           echo "GHOSTTY_PREFIX=${{ github.workspace }}/ghostty-out" >> "$GITHUB_ENV"
 

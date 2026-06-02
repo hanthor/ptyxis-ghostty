@@ -30,7 +30,6 @@ container_tests = {
 
 # Widget tests (link against ghostty)
 widget_tests = {
-  'test-ghostty-widget' : {'sources': [], 'skip': true},
 }
 
 # Ghostty VT terminal behavior tests (link against ghostty-vt only)

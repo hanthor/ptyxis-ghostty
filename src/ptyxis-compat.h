@@ -112,7 +112,7 @@ static inline char *ptyxis_terminal_update_custom_links_list(void *t, void *p) {
 static inline char *ptyxis_terminal_dup_current_file_uri(void *t) { (void)t; return NULL; }
 
 static inline gboolean ptyxis_terminal_can_paste(void *t) { (void)t; return FALSE; }
-static inline void ptyxis_terminal_paste(void *t, const char *text) { (void)t; (void)text; }
+static inline void ptyxis_terminal_paste(void *t) { (void)t; }
 static inline void ptyxis_terminal_reset_for_size(void *t) { (void)t; }
 
 /* Stub functions for VTE terminal API */

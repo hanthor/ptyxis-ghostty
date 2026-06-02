@@ -4,6 +4,7 @@ on: [push, pull_request]
 
 jobs:
   build-linux:
+    name: Linux (Fedora 43)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -49,6 +50,63 @@ jobs:
               gcc-c++ libstdc++-static \
               xorg-x11-server-Xvfb &&
             meson setup builddir -Dghostty_prefix=/ghostty &&
-            meson compile -C builddir &&
-            xvfb-run -a meson test -C builddir --print-errorlogs || true
+            meson compile -C builddir
             '
+
+      - name: Run Test Suite
+        run: |
+          podman run --rm \
+            -v "${{ github.workspace }}":/src \
+            -v "${{ env.GHOSTTY_PREFIX }}":/ghostty \
+            -w /src \
+            -e LIBRARY_PATH=/ghostty/lib \
+            -e C_INCLUDE_PATH=/ghostty/include \
+            fedora:43 bash -c '
+            xvfb-run -a meson test -C builddir --print-errorlogs
+            '
+
+  build-macos:
+    name: macOS (Ventura)
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Install build dependencies
+        run: |
+          brew install meson pkg-config gettext libxml2 \
+            gtk4 libadwaita json-glib
+
+      - name: Build libghostty (macOS)
+        run: |
+          cd subprojects/ghostty
+          zig build -Doptimize=ReleaseFast -Dapp-runtime=none
+          mkdir -p "${{ github.workspace }}/ghostty-out/lib"
+          mkdir -p "${{ github.workspace }}/ghostty-out/include"
+          find zig-out \( -name "ghostty-internal.a" -o -name "libghostty*.a" \) \
+            -exec cp {} "${{ github.workspace }}/ghostty-out/lib/" \;
+          if [ -f "${{ github.workspace }}/ghostty-out/lib/ghostty-internal.a" ]; then
+            mv "${{ github.workspace }}/ghostty-out/lib/ghostty-internal.a" \
+               "${{ github.workspace }}/ghostty-out/lib/libghostty-internal.a"
+          fi
+          cp include/ghostty.h "${{ github.workspace }}/ghostty-out/include/"
+          ls -la "${{ github.workspace }}/ghostty-out/lib/"
+          echo "GHOSTTY_PREFIX=${{ github.workspace }}/ghostty-out" >> "$GITHUB_ENV"
+
+      - name: Build Ptyxis (macOS)
+        run: |
+          export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:/opt/homebrew/lib/pkgconfig:$PKG_CONFIG_PATH"
+          meson setup builddir \
+            -Dghostty_prefix="${{ env.GHOSTTY_PREFIX }}" \
+            -Dbuildtype=debug
+          meson compile -C builddir
+
+      - name: Run Tests (macOS)
+        run: |
+          meson test -C builddir --print-errorlogs || true

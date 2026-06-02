@@ -108,7 +108,7 @@ endforeach
 vt_test_link_args = [
   '-L' + ghty_libdir,
   '-l:libghostty-vt.a',
-  '-lstdc++',
+  host_machine.system() == 'darwin' ? '-lc++' : '-lstdc++',
 ]
 
 vt_test_deps = [

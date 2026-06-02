@@ -121,7 +121,7 @@ ptyxis_link_args = [
   '-L' + ghty_libdir,
   '-lghostty-internal',
   '-lxml2',
-  '-lstdc++',
+  '-l:libstdc++.so.6',
 ]
 
 executable('ptyxis', ptyxis_sources + ptyxis_agent_ipc,

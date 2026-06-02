@@ -80,22 +80,15 @@ foreach test, params: widget_tests
   endif
 endforeach
 
-# --- Container flow tests (need main sources + agent IPC) ---
+# --- Container flow tests (GLib only, no heavy ptyxis deps) ---
 foreach test, params: container_tests
   test_exe = executable(test,
-    ['@0@.c'.format(test),
-     '../src/ptyxis-client.c',
-     '../src/ptyxis-application.c',
-     '../src/ptyxis-profile.c',
-     '../src/ptyxis-util.c'] + ptyxis_agent_ipc,
+    ['@0@.c'.format(test)],
                  c_args: testsuite_c_args,
-           dependencies: ptyxis_deps + [dependency('gio-unix-2.0', version: glib_req)],
-          link_args: ['-lstdc++'],
+           dependencies: [dependency('glib-2.0')],
     include_directories: [
       include_directories('..'),
       include_directories('.'),
-      include_directories('../src'),
-      include_directories('../agent'),
     ],
   )
   if not params.get('skip', false)

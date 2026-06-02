@@ -23,7 +23,7 @@ agent_test_deps = [
   ptyxis_agent_deps,
 ]
 
-# Container flow tests (GLib only, no heavy ptyxis deps)
+# Container flow tests (GLib only)
 container_tests = {
   'test-container-flow' : {},
 }
@@ -33,8 +33,40 @@ widget_tests = {
   'test-ghostty-widget' : {'sources': []},
 }
 
+# --- Agent tests ---
+foreach test, params: agent_tests
+  test_exe = executable(test,
+    ['@0@.c'.format(test)] + ptyxis_agent_sources,
+                 c_args: testsuite_c_args,
+           dependencies: agent_test_deps,
+    include_directories: [
+      include_directories('..'),
+      include_directories('.'),
+      include_directories('../agent'),
+    ],
+  )
+  if not params.get('skip', false)
+    test(test, test_exe, env: test_env)
+  endif
+endforeach
 
-# --- Widget/Config tests ---
+# --- Container flow tests ---
+foreach test, params: container_tests
+  test_exe = executable(test,
+    ['@0@.c'.format(test)],
+                 c_args: testsuite_c_args,
+           dependencies: [dependency('glib-2.0')],
+    include_directories: [
+      include_directories('..'),
+      include_directories('.'),
+    ],
+  )
+  if not params.get('skip', false)
+    test(test, test_exe, env: test_env)
+  endif
+endforeach
+
+# --- Widget tests ---
 widget_test_deps = [
   ptyxis_deps,
   dependency('gtk4', version: gtk_req),
@@ -58,4 +90,3 @@ foreach test, params: widget_tests
     test(test, test_exe, env: test_env)
   endif
 endforeach
-

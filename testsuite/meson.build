@@ -28,10 +28,15 @@ container_tests = {
   'test-container-flow' : {},
 }
 
-# Widget/Config tests (link against ghostty)
+# Widget/Config tests (link against full ghostty)
 widget_tests = {
   'test-ghostty-widget' : {},
   'test-ghostty-config' : {},
+}
+
+# Ghostty VT terminal behavior tests (link against ghostty-vt only)
+vt_tests = {
+  'test-ghostty-terminal' : {},
 }
 
 # --- Agent tests ---
@@ -91,6 +96,35 @@ foreach test, params: container_tests
       include_directories('.'),
       include_directories('../src'),
       include_directories('../agent'),
+    ],
+  )
+  if not params.get('skip', false)
+    test(test, test_exe, env: test_env)
+  endif
+endforeach
+
+# --- Ghostty VT terminal behavior tests ---
+# Links against libghostty-vt.a (lighter weight, VT-only library)
+vt_test_link_args = [
+  '-L' + ghty_libdir,
+  '-l:libghostty-vt.a',
+  '-lstdc++',
+]
+
+vt_test_deps = [
+  dependency('glib-2.0'),
+]
+
+foreach test, params: vt_tests
+  test_exe = executable(test,
+    ['@0@.c'.format(test)],
+                 c_args: testsuite_c_args,
+           dependencies: vt_test_deps,
+          link_args: vt_test_link_args,
+    include_directories: [
+      include_directories('..'),
+      include_directories('.'),
+      include_directories(ghty_include),
     ],
   )
   if not params.get('skip', false)

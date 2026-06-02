@@ -41,6 +41,7 @@ ptyxis_sources = [
   'ptyxis-window.c',
   'eggshell.c',
   'ptyxis-ghostty-widget.c',
+  'ptyxis-ghostty-config.c',
 ]
 
 ptyxis_enum_headers = [

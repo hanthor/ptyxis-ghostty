@@ -1,4 +1,4 @@
-project('ptyxis', 'c',
+project('ptyxis', ['c', 'cpp'],
           version: '50.2',
     meson_version: '>= 1.0.0',
   default_options: [ 'warning_level=2', 'werror=false', 'c_std=gnu11', ],

@@ -9,7 +9,9 @@
 #include "ptyxis-terminal.h"
 
 /* Stub for VteRegex references. Ptyxis URL matching uses PCRE2 directly. */
-typedef struct _VteRegex VteRegex;
+typedef struct _VteRegex { int dummy; } VteRegex;
+static inline void vte_regex_free(VteRegex *r) { g_free(r); }
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(VteRegex, vte_regex_free)
 
 /* Stub for VtePty - PTY lifecycle managed by ghostty.
  * Defined as an opaque GObject type so g_autoptr works. */
@@ -242,23 +244,27 @@ static inline void
 vte_pty_set_utf8(void *pty, gboolean utf8, void **error) { (void)pty; (void)utf8; (void)error; }
 
 /* VTE regex stubs */
-static inline void *
-vte_regex_new_for_match(const char *pattern, int len, int flags, void **error) { (void)pattern; (void)len; (void)flags; (void)error; return NULL; }
+static inline VteRegex *
+vte_regex_new_for_match(const char *pattern, gsize len, guint32 flags, GError **error)
+{ (void)pattern; (void)len; (void)flags; if(error) *error=NULL; return NULL; }
 
-static inline void *
-vte_regex_new_for_search(const char *pattern, int len, int flags, void **error) { (void)pattern; (void)len; (void)flags; (void)error; return NULL; }
+static inline VteRegex *
+vte_regex_new_for_search(const char *pattern, gsize len, guint32 flags, GError **error)
+{ (void)pattern; (void)len; (void)flags; if(error) *error=NULL; return NULL; }
 
 static inline gboolean
-vte_regex_jit(void *regex, int flags, void **error) { (void)regex; (void)flags; (void)error; return TRUE; }
+vte_regex_jit(VteRegex *regex, guint32 flags, GError **error)
+{ (void)regex; (void)flags; if(error) *error=NULL; return TRUE; }
 
-static inline void *
-vte_regex_ref(void *regex) { return regex; }
+static inline VteRegex *
+vte_regex_ref(VteRegex *regex) { return regex; }
 
 static inline void
-vte_regex_unref(void *regex) { (void)regex; }
+vte_regex_unref(VteRegex *regex) { g_clear_pointer(&regex, vte_regex_free); }
 
 static inline char *
-vte_regex_substitute(void *regex, const char *subject, const char *replacement, void **error) { (void)regex; (void)subject; (void)replacement; (void)error; return NULL; }
+vte_regex_substitute(VteRegex *regex, const char *subject, const char *replacement, guint32 flags, GError **error)
+{ (void)regex; (void)subject; (void)replacement; (void)flags; if(error) *error=NULL; return NULL; }
 
 /* VTE utilities */
 static inline const char *

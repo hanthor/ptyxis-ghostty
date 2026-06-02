@@ -525,14 +525,15 @@ ptyxis_client_create_pty (PtyxisClient  *self,
                           GError       **error)
 {
   g_autoptr(VtePty) pty = NULL;
-  g_autofd int fd = -1;
+  int fd = -1;
 
   fd = ptyxis_client_create_pty_fd (self, error);
   if (fd == -1)
     return NULL;
 
-  if ((pty = vte_pty_new_foreign_sync (fd, NULL, error)))
-    vte_pty_set_utf8 (pty, TRUE, NULL);
+  pty = g_new0(VtePty, 1);
+  pty->dummy = fd;
+  /* fd is now owned by pty; don't close it here */
 
   return g_steal_pointer (&pty);
 }

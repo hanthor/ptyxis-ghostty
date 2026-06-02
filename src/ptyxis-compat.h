@@ -11,8 +11,12 @@
 /* Stub for VteRegex references. Ptyxis URL matching uses PCRE2 directly. */
 typedef struct _VteRegex VteRegex;
 
-/* Stub for VtePty - PTY lifecycle managed by ghostty */
-typedef struct _VtePty VtePty;
+/* Stub for VtePty - PTY lifecycle managed by ghostty.
+ * Defined as an opaque GObject type so g_autoptr works. */
+#define VTE_TYPE_PTY (0)
+typedef struct _VtePty { int dummy; } VtePty;
+static inline void vte_pty_free(VtePty *p) { g_free(p); }
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(VtePty, vte_pty_free)
 
 /* Stub for VteEventContext */
 typedef struct _VteEventContext VteEventContext;

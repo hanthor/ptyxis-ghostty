@@ -68,6 +68,6 @@ jobs:
             -e LD_LIBRARY_PATH=/ghostty/lib \
             fedora:43 bash -c '
             dnf install -y --setopt=install_weak_deps=False \
-              xorg-x11-server-Xvfb &&
+              meson xorg-x11-server-Xvfb &&
             xvfb-run -a meson test -C builddir --print-errorlogs
             '

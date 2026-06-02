@@ -22,7 +22,7 @@ jobs:
           zig build -Doptimize=ReleaseFast -Dapp-runtime=none
           mkdir -p "${{ github.workspace }}/ghostty-out/lib"
           mkdir -p "${{ github.workspace }}/ghostty-out/include"
-          find zig-out -name "ghostty-internal.a" -o -name "libghostty*.a" -exec cp {} "${{ github.workspace }}/ghostty-out/lib/" \;
+          find zig-out \( -name "ghostty-internal.a" -o -name "libghostty*.a" \) -exec cp {} "${{ github.workspace }}/ghostty-out/lib/" \;
           cp include/ghostty.h "${{ github.workspace }}/ghostty-out/include/"
           ls -la "${{ github.workspace }}/ghostty-out/lib/"
           echo "GHOSTTY_PREFIX=${{ github.workspace }}/ghostty-out" >> "$GITHUB_ENV"

@@ -28,10 +28,18 @@ struct _PtyxisGhosttyWidget
 
   PtyxisGhosttySize       size;
 
+  /* Input controllers */
+  GtkEventController     *key_controller;
+  GtkGesture             *click_gesture;
+  GtkEventController     *motion_controller;
+  GtkEventController     *scroll_controller;
+
   /* State flags */
   guint                   has_focus : 1;
   guint                   mouse_captured : 1;
   guint                   realized : 1;
+  double                  mouse_x;
+  double                  mouse_y;
 };
 
 G_DEFINE_FINAL_TYPE(PtyxisGhosttyWidget,
@@ -42,6 +50,28 @@ enum {
   PROP_0,
   N_PROPS
 };
+
+/* Input event handlers */
+static gboolean key_pressed_cb(GtkEventControllerKey *key,
+                               guint keyval, guint keycode,
+                               GdkModifierType state,
+                               PtyxisGhosttyWidget *self);
+static void key_released_cb(GtkEventControllerKey *key,
+                            guint keyval, guint keycode,
+                            GdkModifierType state,
+                            PtyxisGhosttyWidget *self);
+static void click_pressed_cb(GtkGestureClick *gesture,
+                             int n_press, double x, double y,
+                             PtyxisGhosttyWidget *self);
+static void click_released_cb(GtkGestureClick *gesture,
+                              int n_press, double x, double y,
+                              PtyxisGhosttyWidget *self);
+static void motion_cb(GtkEventControllerMotion *motion,
+                      double x, double y,
+                      PtyxisGhosttyWidget *self);
+static gboolean scroll_cb(GtkEventControllerScroll *scroll,
+                          double dx, double dy,
+                          PtyxisGhosttyWidget *self);
 
 /* Forward declarations */
 static void ptyxis_ghostty_widget_realize(GtkWidget *widget);
@@ -173,6 +203,39 @@ ptyxis_ghostty_widget_init(PtyxisGhosttyWidget *self)
   g_signal_connect(focus, "leave",
                    G_CALLBACK(ptyxis_ghostty_widget_focus_leave), self);
   gtk_widget_add_controller(GTK_WIDGET(self), focus);
+
+  /* Key events */
+  self->key_controller = gtk_event_controller_key_new();
+  gtk_event_controller_set_propagation_phase(self->key_controller,
+    GTK_PHASE_CAPTURE);
+  g_signal_connect(self->key_controller, "key-pressed",
+                   G_CALLBACK(key_pressed_cb), self);
+  g_signal_connect(self->key_controller, "key-released",
+                   G_CALLBACK(key_released_cb), self);
+  gtk_widget_add_controller(GTK_WIDGET(self), self->key_controller);
+
+  /* Click gesture (button 1-3) */
+  self->click_gesture = GTK_GESTURE(gtk_gesture_click_new());
+  gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(self->click_gesture), 0);
+  g_signal_connect(self->click_gesture, "pressed",
+                   G_CALLBACK(click_pressed_cb), self);
+  g_signal_connect(self->click_gesture, "released",
+                   G_CALLBACK(click_released_cb), self);
+  gtk_widget_add_controller(GTK_WIDGET(self),
+    GTK_EVENT_CONTROLLER(self->click_gesture));
+
+  /* Motion tracking */
+  self->motion_controller = gtk_event_controller_motion_new();
+  g_signal_connect(self->motion_controller, "motion",
+                   G_CALLBACK(motion_cb), self);
+  gtk_widget_add_controller(GTK_WIDGET(self), self->motion_controller);
+
+  /* Scroll events */
+  self->scroll_controller = gtk_event_controller_scroll_new(
+    GTK_EVENT_CONTROLLER_SCROLL_BOTH_AXES);
+  g_signal_connect(self->scroll_controller, "scroll",
+                   G_CALLBACK(scroll_cb), self);
+  gtk_widget_add_controller(GTK_WIDGET(self), self->scroll_controller);
 }
 
 static void
@@ -359,6 +422,214 @@ ptyxis_ghostty_widget_focus_leave(GtkEventControllerFocus *focus,
     ghostty_surface_set_focus(self->surface, false);
   self->has_focus = FALSE;
   gtk_widget_queue_draw(widget);
+}
+
+/* --- Input event handlers --- */
+
+static ghostty_input_mods_e
+mods_to_ghostty(GdkModifierType state)
+{
+  int mods = GHOSTTY_MODS_NONE;
+  if (state & GDK_SHIFT_MASK)   mods |= GHOSTTY_MODS_SHIFT;
+  if (state & GDK_CONTROL_MASK) mods |= GHOSTTY_MODS_CTRL;
+  if (state & GDK_ALT_MASK)     mods |= GHOSTTY_MODS_ALT;
+  if (state & GDK_SUPER_MASK)   mods |= GHOSTTY_MODS_SUPER;
+  return (ghostty_input_mods_e)mods;
+}
+
+static ghostty_input_key_e
+keyval_to_ghostty_key(guint keyval)
+{
+  /* Map common GDK keyvals to ghostty key enum.
+   * This is a partial mapping; extend as needed. */
+  switch (keyval)
+    {
+    case GDK_KEY_Return:    return GHOSTTY_KEY_ENTER;
+    case GDK_KEY_BackSpace: return GHOSTTY_KEY_BACKSPACE;
+    case GDK_KEY_Tab:       return GHOSTTY_KEY_TAB;
+    case GDK_KEY_Escape:    return GHOSTTY_KEY_ESCAPE;
+    case GDK_KEY_Delete:    return GHOSTTY_KEY_DELETE;
+    case GDK_KEY_Insert:    return GHOSTTY_KEY_INSERT;
+    case GDK_KEY_Home:      return GHOSTTY_KEY_HOME;
+    case GDK_KEY_End:       return GHOSTTY_KEY_END;
+    case GDK_KEY_Page_Up:   return GHOSTTY_KEY_PAGE_UP;
+    case GDK_KEY_Page_Down: return GHOSTTY_KEY_PAGE_DOWN;
+    case GDK_KEY_Up:        return GHOSTTY_KEY_ARROW_UP;
+    case GDK_KEY_Down:      return GHOSTTY_KEY_ARROW_DOWN;
+    case GDK_KEY_Left:      return GHOSTTY_KEY_ARROW_LEFT;
+    case GDK_KEY_Right:     return GHOSTTY_KEY_ARROW_RIGHT;
+    case GDK_KEY_F1:        return GHOSTTY_KEY_F1;
+    case GDK_KEY_F2:        return GHOSTTY_KEY_F2;
+    case GDK_KEY_F3:        return GHOSTTY_KEY_F3;
+    case GDK_KEY_F4:        return GHOSTTY_KEY_F4;
+    case GDK_KEY_F5:        return GHOSTTY_KEY_F5;
+    case GDK_KEY_F6:        return GHOSTTY_KEY_F6;
+    case GDK_KEY_F7:        return GHOSTTY_KEY_F7;
+    case GDK_KEY_F8:        return GHOSTTY_KEY_F8;
+    case GDK_KEY_F9:        return GHOSTTY_KEY_F9;
+    case GDK_KEY_F10:       return GHOSTTY_KEY_F10;
+    case GDK_KEY_F11:       return GHOSTTY_KEY_F11;
+    case GDK_KEY_F12:       return GHOSTTY_KEY_F12;
+    case GDK_KEY_Shift_L:   return GHOSTTY_KEY_SHIFT_LEFT;
+    case GDK_KEY_Shift_R:   return GHOSTTY_KEY_SHIFT_RIGHT;
+    case GDK_KEY_Control_L: return GHOSTTY_KEY_CONTROL_LEFT;
+    case GDK_KEY_Control_R: return GHOSTTY_KEY_CONTROL_RIGHT;
+    case GDK_KEY_Alt_L:     return GHOSTTY_KEY_ALT_LEFT;
+    case GDK_KEY_Alt_R:     return GHOSTTY_KEY_ALT_RIGHT;
+    case GDK_KEY_Super_L:   return GHOSTTY_KEY_META_LEFT;
+    case GDK_KEY_Super_R:   return GHOSTTY_KEY_META_RIGHT;
+    case GDK_KEY_space:     return GHOSTTY_KEY_SPACE;
+    default:                return GHOSTTY_KEY_UNIDENTIFIED;
+    }
+}
+
+static gboolean
+key_pressed_cb(GtkEventControllerKey *key,
+               guint keyval, guint keycode,
+               GdkModifierType state,
+               PtyxisGhosttyWidget *self)
+{
+  ghostty_input_key_s gk = {0};
+
+  if (self->surface == NULL)
+    return GDK_EVENT_PROPAGATE;
+
+  gk.action = GHOSTTY_ACTION_PRESS;
+  gk.mods = mods_to_ghostty(state);
+  gk.keycode = keycode;
+
+  /* Try to use physical key mapping first */
+  gk.key = keyval_to_ghostty_key(keyval);
+
+  if (ghostty_surface_key(self->surface, gk))
+    return GDK_EVENT_STOP;
+
+  /* If ghostty didn't handle it as a physical key,
+   * pass the text version for character input */
+  if (gk.key == GHOSTTY_KEY_UNIDENTIFIED)
+    {
+      char buf[8] = {0};
+      guint32 unichar = gdk_keyval_to_unicode(keyval);
+      if (unichar != 0)
+        {
+          g_unichar_to_utf8(unichar, buf);
+          ghostty_surface_text(self->surface, buf, strlen(buf));
+          return GDK_EVENT_STOP;
+        }
+    }
+
+  return GDK_EVENT_PROPAGATE;
+}
+
+static void
+key_released_cb(GtkEventControllerKey *key,
+                guint keyval, guint keycode,
+                GdkModifierType state,
+                PtyxisGhosttyWidget *self)
+{
+  ghostty_input_key_s gk = {0};
+
+  if (self->surface == NULL)
+    return;
+
+  gk.action = GHOSTTY_ACTION_RELEASE;
+  gk.mods = mods_to_ghostty(state);
+  gk.keycode = keycode;
+  gk.key = keyval_to_ghostty_key(keyval);
+
+  ghostty_surface_key(self->surface, gk);
+}
+
+static ghostty_input_mouse_button_e
+button_to_ghostty(guint button)
+{
+  switch (button)
+    {
+    case 1: return GHOSTTY_MOUSE_LEFT;
+    case 2: return GHOSTTY_MOUSE_MIDDLE;
+    case 3: return GHOSTTY_MOUSE_RIGHT;
+    default: return GHOSTTY_MOUSE_UNKNOWN;
+    }
+}
+
+static void
+click_pressed_cb(GtkGestureClick *gesture,
+                 int n_press, double x, double y,
+                 PtyxisGhosttyWidget *self)
+{
+  GdkEvent *event;
+  GdkModifierType state;
+  guint button;
+
+  if (self->surface == NULL)
+    return;
+
+  event = gtk_event_controller_get_current_event(
+    GTK_EVENT_CONTROLLER(gesture));
+  state = gdk_event_get_modifier_state(event);
+  button = gtk_gesture_single_get_current_button(
+    GTK_GESTURE_SINGLE(gesture));
+
+  ghostty_surface_mouse_button(self->surface,
+    GHOSTTY_MOUSE_PRESS,
+    button_to_ghostty(button),
+    mods_to_ghostty(state));
+
+  self->mouse_x = x;
+  self->mouse_y = y;
+}
+
+static void
+click_released_cb(GtkGestureClick *gesture,
+                  int n_press, double x, double y,
+                  PtyxisGhosttyWidget *self)
+{
+  GdkEvent *event;
+  GdkModifierType state;
+  guint button;
+
+  if (self->surface == NULL)
+    return;
+
+  event = gtk_event_controller_get_current_event(
+    GTK_EVENT_CONTROLLER(gesture));
+  state = gdk_event_get_modifier_state(event);
+  button = gtk_gesture_single_get_current_button(
+    GTK_GESTURE_SINGLE(gesture));
+
+  ghostty_surface_mouse_button(self->surface,
+    GHOSTTY_MOUSE_RELEASE,
+    button_to_ghostty(button),
+    mods_to_ghostty(state));
+}
+
+static void
+motion_cb(GtkEventControllerMotion *motion,
+          double x, double y,
+          PtyxisGhosttyWidget *self)
+{
+  GdkModifierType state = 0;
+
+  if (self->surface == NULL)
+    return;
+
+  self->mouse_x = x;
+  self->mouse_y = y;
+
+  ghostty_surface_mouse_pos(self->surface, x, y,
+    mods_to_ghostty(state));
+}
+
+static gboolean
+scroll_cb(GtkEventControllerScroll *scroll,
+          double dx, double dy,
+          PtyxisGhosttyWidget *self)
+{
+  if (self->surface == NULL)
+    return GDK_EVENT_PROPAGATE;
+
+  ghostty_surface_mouse_scroll(self->surface, dx, dy, 0);
+  return GDK_EVENT_STOP;
 }
 
 /* --- Public API --- */

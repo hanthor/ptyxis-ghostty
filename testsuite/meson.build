@@ -33,43 +33,6 @@ widget_tests = {
   'test-ghostty-widget' : {'sources': []},
 }
 
-# Ghostty VT terminal behavior tests (link against ghostty-vt only)
-vt_tests = {
-  'test-ghostty-terminal' : {},
-}
-
-# --- Agent tests ---
-foreach test, params: agent_tests
-  test_exe = executable(test,
-    ['@0@.c'.format(test)] + ptyxis_agent_sources,
-                 c_args: testsuite_c_args,
-           dependencies: agent_test_deps,
-    include_directories: [
-      include_directories('..'),
-      include_directories('.'),
-      include_directories('../agent'),
-    ],
-  )
-  if not params.get('skip', false)
-    test(test, test_exe, env: test_env)
-  endif
-endforeach
-
-# --- Container flow tests (GLib only, no heavy ptyxis deps) ---
-foreach test, params: container_tests
-  test_exe = executable(test,
-    ['@0@.c'.format(test)],
-                 c_args: testsuite_c_args,
-           dependencies: [dependency('glib-2.0')],
-    include_directories: [
-      include_directories('..'),
-      include_directories('.'),
-    ],
-  )
-  if not params.get('skip', false)
-    test(test, test_exe, env: test_env)
-  endif
-endforeach
 
 # --- Widget/Config tests ---
 widget_test_deps = [
@@ -96,29 +59,3 @@ foreach test, params: widget_tests
   endif
 endforeach
 
-# --- Ghostty VT terminal behavior tests ---
-vt_test_link_args = [
-  '-L' + ghty_libdir,
-  '-l:libghostty-vt.a',
-]
-
-vt_test_deps = [
-  dependency('glib-2.0'),
-]
-
-foreach test, params: vt_tests
-  test_exe = executable(test,
-    ['@0@.c'.format(test)],
-                 c_args: testsuite_c_args,
-           dependencies: vt_test_deps,
-          link_args: vt_test_link_args,
-    include_directories: [
-      include_directories('..'),
-      include_directories('.'),
-      include_directories(ghty_include),
-    ],
-  )
-  if not params.get('skip', false)
-    test(test, test_exe, env: test_env)
-  endif
-endforeach

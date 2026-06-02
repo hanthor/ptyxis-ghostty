@@ -19,10 +19,13 @@ test_widget_type_exists(void)
 }
 
 static void
-test_widget_type_size(void)
+test_widget_type_name(void)
 {
-  /* Verify the struct size is reasonable */
-  g_assert_cmpuint(sizeof(PtyxisGhosttyWidget), >, 0);
+  /* Verify the type is registered with correct name */
+  GType type = ptyxis_ghostty_widget_get_type();
+  const char *name = g_type_name(type);
+  g_assert_nonnull(name);
+  g_assert_true(strstr(name, "GhosttyWidget") != NULL);
 }
 
 static void
@@ -52,8 +55,8 @@ main(int argc, char *argv[])
 
   g_test_add_func("/Ptyxis/GhosttyWidget/type_exists",
                   test_widget_type_exists);
-  g_test_add_func("/Ptyxis/GhosttyWidget/struct_size",
-                  test_widget_type_size);
+  g_test_add_func("/Ptyxis/GhosttyWidget/type_name",
+                  test_widget_type_name);
   g_test_add_func("/Ptyxis/GhosttyWidget/api_link",
                   test_public_api_exists);
   g_test_add_func("/Ptyxis/GhosttyWidget/size_defaults",

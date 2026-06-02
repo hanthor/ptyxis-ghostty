@@ -129,6 +129,5 @@ executable('ptyxis', ptyxis_sources + ptyxis_agent_ipc,
               install: true,
                c_args: ptyxis_c_args,
           link_args: ptyxis_link_args,
-        link_language: 'cpp',
   include_directories: ptyxis_include_directories,
 )

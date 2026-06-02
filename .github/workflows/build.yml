@@ -23,12 +23,20 @@ jobs:
           zig build -Doptimize=ReleaseFast -Dapp-runtime=none
           mkdir -p "${{ github.workspace }}/ghostty-out/lib"
           mkdir -p "${{ github.workspace }}/ghostty-out/include"
-          find zig-out \( -name "ghostty-internal.a" -o -name "libghostty*.a" \) -exec cp {} "${{ github.workspace }}/ghostty-out/lib/" \;
-          # Rename for -l linking: ghostty-internal.a -> libghostty-internal.a
+          find zig-out \( -name "ghostty-internal.a" -o -name "libghostty*.a" \) \
+               -exec cp {} "${{ github.workspace }}/ghostty-out/lib/" \;
+          # Rename for -l linking
           if [ -f "${{ github.workspace }}/ghostty-out/lib/ghostty-internal.a" ]; then
             mv "${{ github.workspace }}/ghostty-out/lib/ghostty-internal.a" \
                "${{ github.workspace }}/ghostty-out/lib/libghostty-internal.a"
           fi
+          # Copy zig's libc++ (needed because ghostty uses LLVM libc++)
+          ZIG_ROOT="$(dirname $(which zig))/.."
+          find "$ZIG_ROOT" -name 'libc++.a' -exec cp {} \
+               "${{ github.workspace }}/ghostty-out/lib/libcxx.a" \; 2>/dev/null || true
+          find "$ZIG_ROOT" -name 'libc++abi.a' -exec cp {} \
+               "${{ github.workspace }}/ghostty-out/lib/libcxxabi.a" \; 2>/dev/null || true
+          # Copy headers
           cp include/ghostty.h "${{ github.workspace }}/ghostty-out/include/"
           cp -r include/ghostty "${{ github.workspace }}/ghostty-out/include/"
           ls -la "${{ github.workspace }}/ghostty-out/lib/"
@@ -47,8 +55,7 @@ jobs:
               meson gcc gettext desktop-file-utils appstream \
               glib2-devel gtk4-devel libadwaita-devel \
               json-glib-devel git pkgconf-pkg-config libportal-gtk4-devel \
-              libxml2-devel \
-              gcc-c++ libstdc++-static \
+              libxml2-devel gcc-c++ \
               xorg-x11-server-Xvfb &&
             meson setup builddir -Dghostty_prefix=/ghostty &&
             meson compile -C builddir
@@ -91,11 +98,16 @@ jobs:
           mkdir -p "${{ github.workspace }}/ghostty-out/lib"
           mkdir -p "${{ github.workspace }}/ghostty-out/include"
           find zig-out \( -name "ghostty-internal.a" -o -name "libghostty*.a" \) \
-            -exec cp {} "${{ github.workspace }}/ghostty-out/lib/" \;
+               -exec cp {} "${{ github.workspace }}/ghostty-out/lib/" \;
           if [ -f "${{ github.workspace }}/ghostty-out/lib/ghostty-internal.a" ]; then
             mv "${{ github.workspace }}/ghostty-out/lib/ghostty-internal.a" \
                "${{ github.workspace }}/ghostty-out/lib/libghostty-internal.a"
           fi
+          ZIG_ROOT="$(dirname $(which zig))/.."
+          find "$ZIG_ROOT" -name 'libc++.a' -exec cp {} \
+               "${{ github.workspace }}/ghostty-out/lib/libcxx.a" \; 2>/dev/null || true
+          find "$ZIG_ROOT" -name 'libc++abi.a' -exec cp {} \
+               "${{ github.workspace }}/ghostty-out/lib/libcxxabi.a" \; 2>/dev/null || true
           cp include/ghostty.h "${{ github.workspace }}/ghostty-out/include/"
           cp -r include/ghostty "${{ github.workspace }}/ghostty-out/include/"
           ls -la "${{ github.workspace }}/ghostty-out/lib/"

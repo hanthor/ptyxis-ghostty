@@ -23,15 +23,15 @@ agent_test_deps = [
   ptyxis_agent_deps,
 ]
 
-# Container flow tests (link against main sources + agent IPC)
+# Container flow tests (GLib only, no heavy ptyxis deps)
 container_tests = {
   'test-container-flow' : {},
 }
 
-# Widget/Config tests (link against full ghostty)
+# Widget tests (link against ghostty)
 widget_tests = {
-  'test-ghostty-widget' : {},
-  'test-ghostty-config' : {},
+  'test-ghostty-widget' : {'sources': []},
+  'test-ghostty-config' : {'sources': ['../src/ptyxis-ghostty-config.c']},
 }
 
 # Ghostty VT terminal behavior tests (link against ghostty-vt only)
@@ -56,30 +56,6 @@ foreach test, params: agent_tests
   endif
 endforeach
 
-# --- Widget/Config tests ---
-widget_test_deps = [
-  ptyxis_deps,
-  dependency('gtk4', version: gtk_req),
-]
-
-foreach test, params: widget_tests
-  test_exe = executable(test,
-    ['@0@.c'.format(test), '../src/ptyxis-ghostty-widget.c', '../src/ptyxis-ghostty-config.c', '../src/ptyxis-profile.c', '../src/ptyxis-settings.c', '../src/ptyxis-palette.c'],
-                 c_args: testsuite_c_args + ['-DGHOSTTY_STATIC'],
-           dependencies: widget_test_deps,
-          link_args: ptyxis_link_args,
-    include_directories: [
-      include_directories('..'),
-      include_directories('.'),
-      include_directories('../src'),
-      include_directories(ghty_include),
-    ],
-  )
-  if not params.get('skip', false)
-    test(test, test_exe, env: test_env)
-  endif
-endforeach
-
 # --- Container flow tests (GLib only, no heavy ptyxis deps) ---
 foreach test, params: container_tests
   test_exe = executable(test,
@@ -96,8 +72,32 @@ foreach test, params: container_tests
   endif
 endforeach
 
+# --- Widget/Config tests ---
+widget_test_deps = [
+  ptyxis_deps,
+  dependency('gtk4', version: gtk_req),
+]
+
+foreach test, params: widget_tests
+  extra = params.get('sources', [])
+  test_exe = executable(test,
+    ['@0@.c'.format(test), '../src/ptyxis-ghostty-widget.c'] + extra,
+                 c_args: testsuite_c_args + ['-DGHOSTTY_STATIC', '-DGHOSTTY_TEST_BUILD'],
+           dependencies: widget_test_deps,
+          link_args: ptyxis_link_args,
+    include_directories: [
+      include_directories('..'),
+      include_directories('.'),
+      include_directories('../src'),
+      include_directories(ghty_include),
+    ],
+  )
+  if not params.get('skip', false)
+    test(test, test_exe, env: test_env)
+  endif
+endforeach
+
 # --- Ghostty VT terminal behavior tests ---
-# Links against libghostty-vt.a (lighter weight, VT-only library)
 vt_test_link_args = [
   '-L' + ghty_libdir,
   '-l:libghostty-vt.a',

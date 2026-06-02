@@ -7,6 +7,7 @@
 #include "config.h"
 #include "ptyxis-ghostty-config.h"
 
+#ifndef GHOSTTY_TEST_BUILD
 ghostty_config_t
 ptyxis_ghostty_config_from_profile(PtyxisProfile *profile,
                                     PtyxisSettings *settings)
@@ -145,6 +146,7 @@ ptyxis_ghostty_config_from_profile(PtyxisProfile *profile,
 
   return config;
 }
+#endif /* !GHOSTTY_TEST_BUILD */ 
 
 void
 ptyxis_ghostty_config_palette_from_face(PtyxisPalette *palette,

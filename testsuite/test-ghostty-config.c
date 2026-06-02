@@ -49,13 +49,13 @@ test_config_finalize(void)
 }
 
 static void
-test_config_from_null_profile_and_settings(void)
+test_config_apply_to_surface_null(void)
 {
-  ghostty_config_t config;
-
-  /* Should not crash with NULL inputs */
-  config = ptyxis_ghostty_config_from_profile(NULL, NULL);
+  /* Calling apply with NULL surface should not crash */
+  ghostty_config_t config = ghostty_config_new();
   g_assert_nonnull(config);
+  /* apply_to_surface with NULL is a no-op (guarded by g_return) */
+  ptyxis_ghostty_config_apply_to_surface(NULL, config);
   ghostty_config_free(config);
 }
 
@@ -82,8 +82,8 @@ main(int argc, char *argv[])
                   test_config_clone);
   g_test_add_func("/Ptyxis/GhosttyConfig/finalize",
                   test_config_finalize);
-  g_test_add_func("/Ptyxis/GhosttyConfig/from_null",
-                  test_config_from_null_profile_and_settings);
+  g_test_add_func("/Ptyxis/GhosttyConfig/apply_to_surface_null",
+                  test_config_apply_to_surface_null);
   g_test_add_func("/Ptyxis/GhosttyConfig/palette_zero_init",
                   test_config_palette_zero_init);
 

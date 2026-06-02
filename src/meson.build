@@ -123,14 +123,11 @@ ptyxis_link_args = [
   '-lxml2',
 ]
 
-# C++ runtime required for ghostty static library (contains glslang C++ objects)
-cxx_lib = host_machine.system() == 'darwin' ? '-lc++' : '-lstdc++'
-
 executable('ptyxis', ptyxis_sources + ptyxis_agent_ipc,
          dependencies: ptyxis_deps,
               install: true,
                c_args: ptyxis_c_args,
-          link_args: ptyxis_link_args + [cxx_lib],
+          link_args: ptyxis_link_args,
         link_language: 'cpp',
   include_directories: ptyxis_include_directories,
 )

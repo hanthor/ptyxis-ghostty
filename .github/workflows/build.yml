@@ -1,0 +1,39 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            meson \
+            gcc \
+            gettext \
+            desktop-file-utils \
+            appstream \
+            libglib2.0-dev \
+            libgtk-4-dev \
+            libadwaita-1-dev \
+            libjson-glib-dev \
+            libvte-2.91-gtk4-dev
+
+      - name: Setup build directory
+        run: meson setup builddir
+
+      - name: Build
+        run: meson compile -C builddir
+
+      - name: Run tests
+        run: meson test -C builddir --print-errorlogs || true

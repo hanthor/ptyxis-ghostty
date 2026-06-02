@@ -170,11 +170,10 @@ ghostty_write_clipboard_cb(void *userdata,
   /* Delegated to PtyxisTerminal */
 }
 
-static bool
+static void
 ghostty_close_surface_cb(void *userdata, bool process_exited)
 {
   /* Surface will be freed in unrealize */
-  return process_exited; /* Allow close if process exited */
 }
 
 /* --- GObject lifecycle --- */

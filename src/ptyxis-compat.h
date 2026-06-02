@@ -111,6 +111,10 @@ typedef enum {
 static inline char *ptyxis_terminal_update_custom_links_list(void *t, void *p) { (void)t; (void)p; return NULL; }
 static inline char *ptyxis_terminal_dup_current_file_uri(void *t) { (void)t; return NULL; }
 
+static inline gboolean ptyxis_terminal_can_paste(void *t) { (void)t; return FALSE; }
+static inline void ptyxis_terminal_paste(void *t, const char *text) { (void)t; (void)text; }
+static inline void ptyxis_terminal_reset_for_size(void *t) { (void)t; }
+
 /* Stub functions for VTE terminal API */
 static inline void
 vte_terminal_set_colors(void *t, void *fg, void *bg, void *palette, int n) { (void)t; (void)fg; (void)bg; (void)palette; (void)n; }

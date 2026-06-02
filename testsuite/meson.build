@@ -67,7 +67,7 @@ foreach test, params: widget_tests
     ['@0@.c'.format(test), '../src/ptyxis-ghostty-widget.c', '../src/ptyxis-ghostty-config.c'],
                  c_args: testsuite_c_args + ['-DGHOSTTY_STATIC'],
            dependencies: widget_test_deps,
-          link_args: ptyxis_link_args + ['-lcxx', '-lcxxabi'],
+          link_args: ptyxis_link_args,
     include_directories: [
       include_directories('..'),
       include_directories('.'),

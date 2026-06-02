@@ -9,31 +9,17 @@ on:
 jobs:
   build-linux:
     runs-on: ubuntu-24.04
-    container: fedora:43
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
 
-      - name: Install build dependencies
+      - name: Build in Fedora container
         run: |
-          dnf install -y --setopt=install_weak_deps=False \
-            meson \
-            gcc \
-            gettext \
-            desktop-file-utils \
-            appstream \
-            glib2-devel \
-            gtk4-devel \
-            libadwaita-devel \
-            json-glib-devel \
-            vte291-gtk4-devel
-
-      - name: Setup build directory
-        run: meson setup builddir
-
-      - name: Build
-        run: meson compile -C builddir
-
-      - name: Run tests
-        run: meson test -C builddir --print-errorlogs || true
+          podman run --rm -v "$(pwd)":/src -w /src fedora:43 bash -c '
+            dnf install -y --setopt=install_weak_deps=False \
+              meson gcc gettext desktop-file-utils appstream \
+              glib2-devel gtk4-devel libadwaita-devel \
+              json-glib-devel vte291-gtk4-devel git &&
+            meson setup builddir &&
+            meson compile -C builddir &&
+            meson test -C builddir --print-errorlogs || true
+          '

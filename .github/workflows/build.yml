@@ -9,6 +9,7 @@ on:
 jobs:
   build-linux:
     runs-on: ubuntu-24.04
+    container: fedora:43
     steps:
       - uses: actions/checkout@v4
         with:
@@ -16,18 +17,17 @@ jobs:
 
       - name: Install build dependencies
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq \
+          dnf install -y --setopt=install_weak_deps=False \
             meson \
             gcc \
             gettext \
             desktop-file-utils \
             appstream \
-            libglib2.0-dev \
-            libgtk-4-dev \
-            libadwaita-1-dev \
-            libjson-glib-dev \
-            libvte-2.91-gtk4-dev
+            glib2-devel \
+            gtk4-devel \
+            libadwaita-devel \
+            json-glib-devel \
+            vte291-gtk4-devel
 
       - name: Setup build directory
         run: meson setup builddir

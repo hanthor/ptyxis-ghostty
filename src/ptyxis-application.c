@@ -1725,6 +1725,15 @@ ptyxis_application_report_error (PtyxisApplication *self,
            error->message);
 }
 
+int
+ptyxis_application_create_pty_fd (PtyxisApplication  *self,
+                                  GError            **error)
+{
+  g_return_val_if_fail (PTYXIS_IS_APPLICATION (self), -1);
+
+  return ptyxis_client_create_pty_fd (self->client, error);
+}
+
 VtePty *
 ptyxis_application_create_pty (PtyxisApplication  *self,
                                GError            **error)

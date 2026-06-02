@@ -37,6 +37,8 @@ PtyxisClient       *ptyxis_client_new                        (gboolean          
                                                               GError              **error);
 const char         *ptyxis_client_get_user_data_dir          (PtyxisClient         *self);
 void                ptyxis_client_force_exit                 (PtyxisClient         *self);
+int                 ptyxis_client_create_pty_fd             (PtyxisClient         *self,
+                                                              GError              **error);
 VtePty             *ptyxis_client_create_pty                 (PtyxisClient         *self,
                                                               GError              **error);
 int                 ptyxis_client_create_pty_producer        (PtyxisClient         *self,

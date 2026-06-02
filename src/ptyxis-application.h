@@ -60,6 +60,8 @@ PtyxisIpcContainer *ptyxis_application_lookup_container           (PtyxisApplica
 void                ptyxis_application_report_error               (PtyxisApplication    *self,
                                                                    GType                 subsystem,
                                                                    const GError         *error);
+int                 ptyxis_application_create_pty_fd             (PtyxisApplication    *self,
+                                                                     GError              **error);
 VtePty             *ptyxis_application_create_pty                 (PtyxisApplication    *self,
                                                                    GError              **error);
 void                ptyxis_application_spawn_async                (PtyxisApplication    *self,

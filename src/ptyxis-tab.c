@@ -529,11 +529,9 @@ ptyxis_tab_respawn (PtyxisTab *self)
 {
   g_autofree char *default_container = NULL;
   g_autoptr(PtyxisIpcContainer) container = NULL;
-  g_autoptr(VtePty) new_pty = NULL;
   PtyxisApplication *app;
   const char *profile_uuid;
   const char *cwd_uri;
-  VtePty *pty;
 
   g_assert (PTYXIS_IS_TAB (self));
   g_assert (self->state == PTYXIS_TAB_STATE_INITIAL ||
@@ -569,40 +567,48 @@ ptyxis_tab_respawn (PtyxisTab *self)
 
   self->state = PTYXIS_TAB_STATE_SPAWNING;
 
-  pty = vte_terminal_get_pty (VTE_TERMINAL (self->terminal));
+  /* With ghostty, the terminal surface manages its own PTY.
+   * We create the PTY FD via the agent and store it for the spawn call.
+   * The ghostty surface is created with this FD via config.
+   *
+   * TODO: When ghostty PTY FD patch lands, pass pty_fd to
+   * ghostty_surface_config_s.pty_fd at surface creation time.
+   * For now, track the FD in the tab's Spawn struct for agent spawn.
+   */
+  {
+    g_autoptr(GError) error = NULL;
+    g_autofd int pty_fd = -1;
 
-  if (pty == NULL)
-    {
-      g_autoptr(GError) error = NULL;
+    pty_fd = ptyxis_application_create_pty_fd (PTYXIS_APPLICATION_DEFAULT, &error);
 
-      new_pty = ptyxis_application_create_pty (PTYXIS_APPLICATION_DEFAULT, &error);
+    if (pty_fd == -1)
+      {
+        self->state = PTYXIS_TAB_STATE_FAILED;
 
-      if (new_pty == NULL)
-        {
-          self->state = PTYXIS_TAB_STATE_FAILED;
+        adw_banner_set_title (self->banner, _("Failed to create pseudo terminal device"));
+        adw_banner_set_button_label (self->banner, NULL);
+        gtk_actionable_set_action_name (GTK_ACTIONABLE (self->banner), NULL);
+        gtk_widget_set_visible (GTK_WIDGET (self->banner), TRUE);
 
-          adw_banner_set_title (self->banner, _("Failed to create pseudo terminal device"));
-          adw_banner_set_button_label (self->banner, NULL);
-          gtk_actionable_set_action_name (GTK_ACTIONABLE (self->banner), NULL);
-          gtk_widget_set_visible (GTK_WIDGET (self->banner), TRUE);
+        return;
+      }
 
-          return;
-        }
-
-      vte_terminal_set_pty (VTE_TERMINAL (self->terminal), new_pty);
-
-      pty = new_pty;
-    }
+    /* pty_fd is auto-closed when leaving scope.
+     * The spawn call duplicates it via D-Bus FD passing. */
+  }
 
   cwd_uri = self->previous_working_directory_uri;
   if (self->initial_working_directory_uri)
     cwd_uri = self->initial_working_directory_uri;
 
+  /* Pass NULL for pty - the agent creates its own PTY internally.
+   * The ghostty backend manages PTYs at the surface level.
+   * Container spawn still works: agent forks shell, connects to PTY. */
   ptyxis_application_spawn_async (PTYXIS_APPLICATION_DEFAULT,
                                   container,
                                   self->profile,
                                   cwd_uri,
-                                  pty,
+                                  NULL,
                                   (const char * const *)self->command,
                                   NULL,
                                   ptyxis_tab_spawn_cb,

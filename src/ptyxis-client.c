@@ -487,17 +487,18 @@ ptyxis_client_force_exit (PtyxisClient *self)
   g_subprocess_force_exit (self->subprocess);
 }
 
-VtePty *
-ptyxis_client_create_pty (PtyxisClient  *self,
-                          GError       **error)
+/* New API: returns raw PTY master FD from agent.
+ * Caller owns the FD and must close it. */
+int
+ptyxis_client_create_pty_fd (PtyxisClient  *self,
+                             GError       **error)
 {
   g_autoptr(GVariant) out_fd = NULL;
   g_autoptr(GUnixFDList) out_fd_list = NULL;
-  g_autoptr(VtePty) pty = NULL;
   int fd;
   int handle;
 
-  g_return_val_if_fail (PTYXIS_IS_CLIENT (self), NULL);
+  g_return_val_if_fail (PTYXIS_IS_CLIENT (self), -1);
 
   if (self->subprocess == NULL || self->proxy == NULL)
     {
@@ -505,15 +506,28 @@ ptyxis_client_create_pty (PtyxisClient  *self,
                            G_IO_ERROR,
                            G_IO_ERROR_CLOSED,
                            "The connection to the agent has closed");
-      return NULL;
+      return -1;
     }
 
   if (!ptyxis_ipc_agent_call_create_pty_sync (self->proxy, NULL, &out_fd, &out_fd_list,
                                               NULL, error))
-    return NULL;
+    return -1;
 
   handle = g_variant_get_handle (out_fd);
   fd = g_unix_fd_list_get (out_fd_list, handle, error);
+
+  return fd;
+}
+
+/* Deprecated: legacy VtePty wrapper. Use ptyxis_client_create_pty_fd() instead. */
+VtePty *
+ptyxis_client_create_pty (PtyxisClient  *self,
+                          GError       **error)
+{
+  g_autoptr(VtePty) pty = NULL;
+  g_autofd int fd = -1;
+
+  fd = ptyxis_client_create_pty_fd (self, error);
   if (fd == -1)
     return NULL;
 

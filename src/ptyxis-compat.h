@@ -107,6 +107,10 @@ typedef enum {
 #define VTE_TERMPROP_CONTAINER_NAME    "container-name"
 #define VTE_TERMPROP_CONTAINER_RUNTIME "container-runtime"
 
+/* Additional missing stubs */
+static inline char *ptyxis_terminal_update_custom_links_list(void *t) { (void)t; return NULL; }
+static inline char *ptyxis_terminal_dup_current_file_uri(void *t) { (void)t; return NULL; }
+
 /* Stub functions for VTE terminal API */
 static inline void
 vte_terminal_set_colors(void *t, void *fg, void *bg, void *palette, int n) { (void)t; (void)fg; (void)bg; (void)palette; (void)n; }
@@ -199,10 +203,10 @@ static inline char *
 vte_terminal_get_termprop_string(void *t, const char *prop, int *len) { (void)t; (void)prop; if(len) *len=0; return NULL; }
 
 static inline gboolean
-vte_terminal_get_termprop_int_by_id(void *t, int id, int *val) { (void)t; (void)id; if(val) *val=0; return TRUE; }
+vte_terminal_get_termprop_int_by_id(void *t, int id, gint64 *val) { (void)t; (void)id; if(val) *val=0; return TRUE; }
 
 static inline gboolean
-vte_terminal_get_termprop_uint_by_id(void *t, int id, guint *val) { (void)t; (void)id; if(val) *val=0; return TRUE; }
+vte_terminal_get_termprop_uint_by_id(void *t, int id, guint64 *val) { (void)t; (void)id; if(val) *val=0; return TRUE; }
 
 static inline char *
 vte_terminal_ref_termprop_uri_by_id(void *t, int id) { (void)t; (void)id; return NULL; }

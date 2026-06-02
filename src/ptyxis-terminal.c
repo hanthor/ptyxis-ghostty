@@ -155,7 +155,8 @@ ptyxis_terminal_action_cb(ghostty_action_tag_e tag,
       g_signal_emit(self, signals[SHELL_PRECMD], 0);
       break;
 
-    case GHOSTTY_ACTION_CLOSE_SURFACE:
+    case GHOSTTY_ACTION_CLOSE_WINDOW:
+    case GHOSTTY_ACTION_CLOSE_TAB:
       /* Let tabs handle this */
       return true;
 
@@ -660,6 +661,11 @@ ptyxis_terminal_snapshot(GtkWidget   *widget,
                          GtkSnapshot *snapshot)
 {
   /* Delegate to the ghostty widget's snapshot */
+  /* Forward declaration for paste callback */
+  static void paste_clipboard_action_cb(GObject *object,
+                                         GAsyncResult *result,
+                                         gpointer user_data);
+
   GTK_WIDGET_CLASS(ptyxis_terminal_parent_class)->snapshot(widget, snapshot);
 }
 
@@ -733,7 +739,7 @@ ptyxis_terminal_dispose(GObject *object)
 {
   PtyxisTerminal *self = PTYXIS_TERMINAL(object);
 
-  g_clear_pointer(&self->ghostty, gtk_widget_unparent);
+  g_clear_pointer(&self->ghostty, (GDestroyNotify)gtk_widget_unparent);
 
   g_clear_object(&self->palette);
   g_clear_object(&self->popover);
@@ -1090,7 +1096,9 @@ ptyxis_terminal_set_custom_link(PtyxisTerminal  *self,
 
   g_return_if_fail(PTYXIS_IS_TERMINAL(self));
 
-  custom_link = ptyxis_custom_link_new(regex, replace, cursor_name);
+  custom_link = ptyxis_custom_link_new();
+  ptyxis_custom_link_set_pattern(custom_link, regex);
+  ptyxis_custom_link_set_target(custom_link, replace);
 
   g_hash_table_insert(self->custom_links,
                       GINT_TO_POINTER(tag),

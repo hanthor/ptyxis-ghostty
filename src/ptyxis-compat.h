@@ -6,6 +6,7 @@
  */
 #pragma once
 
+#include <pango/pango.h>
 #include "ptyxis-terminal.h"
 
 /* Stub for VteRegex references. Ptyxis URL matching uses PCRE2 directly. */
@@ -182,8 +183,14 @@ vte_terminal_get_scroll_on_keystroke(void *t) { (void)t; return TRUE; }
 static inline char *
 vte_terminal_get_text_selected(void *t, int format) { (void)t; (void)format; return NULL; }
 
-static inline char *
+static inline const PangoFontDescription *
 vte_terminal_get_font(void *t) { (void)t; return NULL; }
+
+static inline glong
+vte_terminal_get_char_width(void *t) { (void)t; return 8; }
+
+static inline glong
+vte_terminal_get_char_height(void *t) { (void)t; return 16; }
 
 static inline char *
 vte_terminal_get_termprop_string_by_id(void *t, int id, int *len) { (void)t; (void)id; if(len) *len=0; return NULL; }

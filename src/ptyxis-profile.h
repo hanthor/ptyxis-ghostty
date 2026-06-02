@@ -22,7 +22,7 @@
 #pragma once
 
 #include <pango/pango.h>
-#include <vte/vte.h>
+#include "ptyxis-compat.h"
 
 #include "ptyxis-palette.h"
 #include "ptyxis-custom-link.h"

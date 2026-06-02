@@ -22,7 +22,7 @@
 #pragma once
 
 #include <adwaita.h>
-#include <vte/vte.h>
+#include "ptyxis-compat.h"
 
 G_BEGIN_DECLS
 

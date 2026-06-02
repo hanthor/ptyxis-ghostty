@@ -22,7 +22,7 @@
 #pragma once
 
 #include <gio/gio.h>
-#include <vte/vte.h>
+#include "ptyxis-compat.h"
 
 #include "ptyxis-agent-ipc.h"
 #include "ptyxis-profile.h"

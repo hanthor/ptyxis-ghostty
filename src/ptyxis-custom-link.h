@@ -20,7 +20,7 @@
 #pragma once
 
 #include <glib-object.h>
-#include <vte/vte.h>
+#include "ptyxis-compat.h"
 
 G_BEGIN_DECLS
 

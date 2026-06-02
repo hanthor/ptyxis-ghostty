@@ -93,6 +93,9 @@ main(int argc, char *argv[])
 {
   g_test_init(&argc, &argv, NULL);
 
+  /* GTK must be initialized before creating any GTK widgets */
+  gtk_init();
+
   g_test_add_func("/Ptyxis/GhosttyWidget/new",
                   test_widget_new);
   g_test_add_func("/Ptyxis/GhosttyWidget/has_selection_false",

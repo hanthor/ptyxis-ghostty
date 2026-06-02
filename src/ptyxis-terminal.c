@@ -28,6 +28,11 @@
 
 #include "terminal-regex.h"
 
+/* Forward declarations */
+static void paste_clipboard_action_cb(GObject *object,
+                                       GAsyncResult *result,
+                                       gpointer user_data);
+
 #define SIZE_DISMISS_TIMEOUT_MSEC 1000
 #define URL_MATCH_CURSOR_NAME "pointer"
 
@@ -651,11 +656,6 @@ ptyxis_terminal_grid_size_changed_cb(PtyxisTerminal *self,
   self->n_columns = columns;
   self->n_rows = rows;
 }
-
-/* Forward declaration for paste async callback */
-static void paste_clipboard_action_cb(GObject *object,
-                                       GAsyncResult *result,
-                                       gpointer user_data);
 
 /* --- Snapshot (for GtkScreenshot compatibility) --- */
 

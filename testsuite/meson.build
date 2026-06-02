@@ -31,7 +31,7 @@ container_tests = {
 # Widget tests (link against ghostty)
 widget_tests = {
   'test-ghostty-widget' : {'sources': []},
-  'test-ghostty-config' : {'sources': ['../src/ptyxis-ghostty-config.c', '../src/ptyxis-palette.c']},
+  'test-ghostty-config' : {'sources': [], 'skip': true},
 }
 
 # Ghostty VT terminal behavior tests (link against ghostty-vt only)

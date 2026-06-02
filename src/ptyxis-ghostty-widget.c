@@ -99,12 +99,11 @@ static void ptyxis_ghostty_widget_focus_leave(GtkEventControllerFocus *focus,
 
 /* --- Ghostty runtime callbacks --- */
 
-static bool
+static void
 ghostty_wakeup_cb(void *userdata)
 {
   PtyxisGhosttyWidget *self = PTYXIS_GHOSTTY_WIDGET(userdata);
   gtk_widget_queue_draw(GTK_WIDGET(self));
-  return true;
 }
 
 static bool
@@ -130,13 +129,13 @@ ghostty_action_cb(ghostty_app_t app,
       gtk_widget_queue_resize(GTK_WIDGET(self));
     }
 
-  if (action.tag == GHOSTTY_ACTION_CLOSE_SURFACE)
+  if (action.tag == GHOSTTY_ACTION_CLOSE_TAB)
     {
       /* Forward to Ptyxis for tab close handling */
     }
 
   if (self->action_func)
-    return self->action_func(action.tag, &action.action, self->action_userdata);
+    self->action_func(action.tag, &action.action, self->action_userdata);
 
   return false;
 }
@@ -377,8 +376,9 @@ ptyxis_ghostty_widget_snapshot(GtkWidget *widget,
    *
    * Placeholder: just fill background.
    */
-  graphene_rect_t bounds;
-  gtk_widget_get_bounds(widget, &bounds);
+  graphene_rect_t bounds = GRAPHENE_RECT_INIT(0, 0,
+    gtk_widget_get_width(widget),
+    gtk_widget_get_height(widget));
   gtk_snapshot_append_color(snapshot,
                             &(GdkRGBA){0.1, 0.1, 0.12, 1.0},
                             &bounds);
@@ -399,7 +399,7 @@ ptyxis_ghostty_widget_unroot(GtkWidget *widget)
 static gboolean
 ptyxis_ghostty_widget_grab_focus(GtkWidget *widget)
 {
-  return gtk_widget_grab_focus_child(widget);
+  return gtk_widget_grab_focus(widget);
 }
 
 static void
@@ -499,14 +499,15 @@ key_pressed_cb(GtkEventControllerKey *key,
   gk.keycode = keycode;
 
   /* Try to use physical key mapping first */
-  gk.key = keyval_to_ghostty_key(keyval);
+  gk.text = NULL;  /* Text input handled below */
 
+  /* Pass key event to ghostty; if unhandled, try as text */
   if (ghostty_surface_key(self->surface, gk))
     return GDK_EVENT_STOP;
 
   /* If ghostty didn't handle it as a physical key,
    * pass the text version for character input */
-  if (gk.key == GHOSTTY_KEY_UNIDENTIFIED)
+  if (gk.keycode == keycode)
     {
       char buf[8] = {0};
       guint32 unichar = gdk_keyval_to_unicode(keyval);
@@ -535,7 +536,7 @@ key_released_cb(GtkEventControllerKey *key,
   gk.action = GHOSTTY_ACTION_RELEASE;
   gk.mods = mods_to_ghostty(state);
   gk.keycode = keycode;
-  gk.key = keyval_to_ghostty_key(keyval);
+  gk.text = NULL;
 
   ghostty_surface_key(self->surface, gk);
 }
@@ -700,7 +701,7 @@ ptyxis_ghostty_widget_get_selected_text(PtyxisGhosttyWidget *self)
   if (!ghostty_surface_read_selection(self->surface, &text))
     return NULL;
 
-  return g_strndup(text.ptr, text.len);
+  return g_strndup(text.text, text.text_len);
 }
 
 char *

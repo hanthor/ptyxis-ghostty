@@ -23,13 +23,10 @@ jobs:
           zig build -Doptimize=ReleaseFast -Dapp-runtime=none
           mkdir -p "${{ github.workspace }}/ghostty-out/lib"
           mkdir -p "${{ github.workspace }}/ghostty-out/include"
-          # Copy shared library (already links libc++ internally)
           find zig-out -name "ghostty-internal.so" -exec cp {} \
                "${{ github.workspace }}/ghostty-out/lib/libghostty-internal.so" \;
-          # Copy static libs (for VT tests)
           find zig-out \( -name "ghostty-internal.a" -o -name "libghostty*.a" \) \
                -exec cp {} "${{ github.workspace }}/ghostty-out/lib/" \;
-          # Rename static lib for -l linking
           if [ -f "${{ github.workspace }}/ghostty-out/lib/ghostty-internal.a" ]; then
             mv "${{ github.workspace }}/ghostty-out/lib/ghostty-internal.a" \
                "${{ github.workspace }}/ghostty-out/lib/libghostty-internal.a"
@@ -39,25 +36,7 @@ jobs:
           ls -la "${{ github.workspace }}/ghostty-out/lib/"
           echo "GHOSTTY_PREFIX=${{ github.workspace }}/ghostty-out" >> "$GITHUB_ENV"
 
-      - name: Build Ptyxis
-        run: |
-          podman run --rm \
-            -v "${{ github.workspace }}":/src \
-            -v "${{ env.GHOSTTY_PREFIX }}":/ghostty \
-            -w /src \
-            -e LIBRARY_PATH=/ghostty/lib \
-            -e C_INCLUDE_PATH=/ghostty/include \
-            fedora:43 bash -c '
-            dnf install -y --setopt=install_weak_deps=False \
-              meson gcc gettext desktop-file-utils appstream \
-              glib2-devel gtk4-devel libadwaita-devel \
-              json-glib-devel git pkgconf-pkg-config libportal-gtk4-devel \
-              libxml2-devel xorg-x11-server-Xvfb &&
-            meson setup builddir -Dghostty_prefix=/ghostty &&
-            meson compile -C builddir
-            '
-
-      - name: Run Test Suite
+      - name: Build and Test Ptyxis
         run: |
           podman run --rm \
             -v "${{ github.workspace }}":/src \
@@ -68,6 +47,11 @@ jobs:
             -e LD_LIBRARY_PATH=/ghostty/lib \
             fedora:43 bash -c '
             dnf install -y --setopt=install_weak_deps=False \
-              meson xorg-x11-server-Xvfb &&
+              meson gcc gettext desktop-file-utils appstream \
+              glib2-devel gtk4-devel libadwaita-devel \
+              json-glib-devel git pkgconf-pkg-config libportal-gtk4-devel \
+              libxml2-devel xorg-x11-server-Xvfb &&
+            meson setup builddir -Dghostty_prefix=/ghostty &&
+            meson compile -C builddir &&
             xvfb-run -a meson test -C builddir --print-errorlogs
             '

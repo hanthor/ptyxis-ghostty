@@ -170,7 +170,7 @@ test_terminal_resize(void)
   GhosttyTerminal terminal = create_terminal(80, 24);
   uint16_t cols = 0, rows = 0;
 
-  ghostty_terminal_resize(terminal, 132, 50);
+  ghostty_terminal_resize(terminal, 132, 50, 8, 16);
 
   ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_COLS, &cols);
   ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_ROWS, &rows);
@@ -250,10 +250,13 @@ test_terminal_key_encoder(void)
   GhosttyTerminal terminal = create_terminal(80, 24);
   GhosttyKeyEncoder encoder = NULL;
 
-  /* Create a key encoder from the terminal */
-  GhosttyResult r = ghostty_key_encoder_new_from_terminal(terminal, &encoder);
+  /* Create a key encoder */
+  GhosttyResult r = ghostty_key_encoder_new(NULL, &encoder);
   g_assert_cmpint(r, ==, GHOSTTY_SUCCESS);
   g_assert_nonnull(encoder);
+
+  /* Link the encoder to the terminal (configure key modes) */
+  ghostty_key_encoder_setopt_from_terminal(encoder, terminal);
 
   ghostty_key_encoder_free(encoder);
   ghostty_terminal_free(terminal);

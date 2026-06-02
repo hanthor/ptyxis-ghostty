@@ -23,6 +23,7 @@
 
 #include "ptyxis-find-bar.h"
 #include "ptyxis-util.h"
+#include "ptyxis-compat.h"
 
 struct _PtyxisFindBar
 {

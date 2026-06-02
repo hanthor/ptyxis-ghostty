@@ -35,6 +35,7 @@
 #include "ptyxis-settings.h"
 #include "ptyxis-util.h"
 #include "ptyxis-window.h"
+#include "ptyxis-compat.h"
 
 #define PORTAL_BUS_NAME "org.freedesktop.portal.Desktop"
 #define PORTAL_OBJECT_PATH "/org/freedesktop/portal/desktop"

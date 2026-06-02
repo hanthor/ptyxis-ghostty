@@ -40,6 +40,7 @@ ptyxis_sources = [
   'ptyxis-window-dressing.c',
   'ptyxis-window.c',
   'eggshell.c',
+  'ptyxis-ghostty-widget.c',
 ]
 
 ptyxis_enum_headers = [
@@ -80,12 +81,16 @@ configure_file(
     install_dir: get_option('datadir') / 'glib-2.0' / 'schemas',
 )
 
+# Ghostty: built externally via scripts/build-ghostty.sh or CI
+ghty_prefix = get_option('ghostty_prefix')
+ghty_include = ghty_prefix != '' ? ghty_prefix / 'include' : '../subprojects/ghostty/include'
+ghty_libdir = ghty_prefix != '' ? ghty_prefix / 'lib' : '../subprojects/ghostty/zig-out/lib'
+
 ptyxis_deps = [
   dependency('gio-unix-2.0', version: glib_req),
   dependency('gtk4', version: gtk_req),
   dependency('libadwaita-1', version: adwaita_req),
   dependency('json-glib-1.0', version: json_glib_req),
-  dependency('vte-2.91-gtk4', version: vte_req),
   cc.find_library('m', required: false),
 ]
 
@@ -108,11 +113,18 @@ ptyxis_include_directories = [
   include_directories('.'),
   include_directories('..'),
   include_directories('../agent'),
+  include_directories(ghty_include),
+]
+
+ptyxis_link_args = [
+  '-L' + ghty_libdir,
+  '-lghostty-internal',
 ]
 
 executable('ptyxis', ptyxis_sources + ptyxis_agent_ipc,
          dependencies: ptyxis_deps,
               install: true,
                c_args: ptyxis_c_args,
+          link_args: ptyxis_link_args,
   include_directories: ptyxis_include_directories,
 )

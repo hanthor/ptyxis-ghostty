@@ -10,3 +10,4 @@ option('gschema-path', type: 'string', value: '', description: 'An alternative g
 # since that is where we will want to build a binary that can run on the host
 # outside of the Flatpak container.
 option('libc-compat', type: 'boolean', value: false, description: 'Try to build the agent with old glibc symbols for running on older hosts')
+option('ghostty_prefix', type: 'string', value: '', description: 'Path to libghostty installation prefix')

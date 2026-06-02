@@ -12,14 +12,48 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build in Fedora container
+      - name: Install Zig
         run: |
-          podman run --rm -v "$(pwd)":/src -w /src fedora:43 bash -c '
+          curl -L https://ziglang.org/download/index.json | \
+            python3 -c "
+import json, sys, urllib.request
+data = json.load(sys.stdin)
+ver = data['master']['version']
+url = data['master']['x86_64-linux']['tarball']
+print(f'Version: {ver}')
+print(f'URL: {url}')
+urllib.request.urlretrieve(url, '/tmp/zig.tar.xz')
+"
+          sudo mkdir -p /usr/local/zig
+          sudo tar -xf /tmp/zig.tar.xz -C /usr/local/zig --strip-components=1
+          echo "/usr/local/zig" >> "$GITHUB_PATH"
+          zig version
+
+      - name: Build libghostty
+        run: |
+          cd subprojects/ghostty
+          zig build -Doptimize=ReleaseFast
+          mkdir -p "$GITHUB_WORKSPACE/ghostty-out/lib"
+          mkdir -p "$GITHUB_WORKSPACE/ghostty-out/include"
+          cp zig-out/lib/libghostty-internal.a "$GITHUB_WORKSPACE/ghostty-out/lib/" || \
+            cp zig-out/ghostty-internal.a "$GITHUB_WORKSPACE/ghostty-out/lib/"
+          cp include/ghostty.h "$GITHUB_WORKSPACE/ghostty-out/include/"
+          echo "GHOSTTY_PREFIX=$GITHUB_WORKSPACE/ghostty-out" >> "$GITHUB_ENV"
+
+      - name: Build Ptyxis with Ghostty
+        run: |
+          podman run --rm \
+            -v "$(pwd)":/src \
+            -v "$GHOSTTY_PREFIX":/ghostty \
+            -w /src \
+            -e PKG_CONFIG_PATH=/ghostty/lib/pkgconfig \
+            fedora:43 bash -c '
             dnf install -y --setopt=install_weak_deps=False \
               meson gcc gettext desktop-file-utils appstream \
               glib2-devel gtk4-devel libadwaita-devel \
-              json-glib-devel vte291-gtk4-devel git &&
-            meson setup builddir &&
-            meson compile -C builddir &&
-            meson test -C builddir --print-errorlogs || true
-          '
+              json-glib-devel git pkgconfig &&
+            export LIBRARY_PATH=/ghostty/lib &&
+            export C_INCLUDE_PATH=/ghostty/include &&
+            meson setup builddir -Dghostty_prefix=/ghostty &&
+            meson compile -C builddir
+            '

@@ -27,6 +27,7 @@
 #include "ptyxis-enums.h"
 #include "ptyxis-settings.h"
 #include "ptyxis-util.h"
+#include "ptyxis-compat.h"
 
 struct _PtyxisSettings
 {

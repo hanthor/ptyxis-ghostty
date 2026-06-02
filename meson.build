@@ -48,13 +48,11 @@ glib_req_version = '2.80'
 gtk_req_version = '4.14'
 adwaita_req_version = '1.8'
 json_glib_req_version = '1.6'
-vte_req_version = '0.79'
 
 glib_req = '>= @0@'.format(glib_req_version)
 gtk_req = '>= @0@'.format(gtk_req_version)
 adwaita_req = '>= @0@'.format(adwaita_req_version)
 json_glib_req = '>= @0@'.format(json_glib_req_version)
-vte_req = '>= @0@'.format(vte_req_version)
 
 # Various optimizations for non-debug builds including disabling of
 # cast checks, asserts, and additional link options.

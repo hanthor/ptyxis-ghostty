@@ -24,6 +24,7 @@
 
 #include "ptyxis-inspector.h"
 #include "ptyxis-palette-preview-color.h"
+#include "ptyxis-compat.h"
 
 /* This will not transition to AdwDialog until there is a way for
  * toplevel windows _with_ transient-for set to maintain window

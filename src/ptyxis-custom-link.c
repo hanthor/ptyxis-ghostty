@@ -21,6 +21,7 @@
 #include "config.h"
 
 #include "ptyxis-custom-link.h"
+#include "ptyxis-compat.h"
 
 #define PCRE2_CODE_UNIT_WIDTH 0
 #include <pcre2.h>

@@ -40,6 +40,7 @@
 #include "ptyxis-util.h"
 #include "ptyxis-window.h"
 #include "ptyxis-window-dressing.h"
+#include "ptyxis-compat.h"
 
 #ifdef GDK_WINDOWING_X11
 # include <gdk/x11/gdkx.h>

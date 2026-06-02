@@ -38,6 +38,7 @@
 #include "ptyxis-tab-notify.h"
 #include "ptyxis-tab-private.h"
 #include "ptyxis-terminal.h"
+#include "ptyxis-compat.h"
 #include "ptyxis-util.h"
 #include "ptyxis-window.h"
 

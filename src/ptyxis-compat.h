@@ -1,0 +1,247 @@
+/*
+ * ptyxis-compat.h
+ *
+ * VTE → Ghostty compatibility shims.
+ * Included during the transition to stub out or redirect VTE API usage.
+ */
+#pragma once
+
+#include "ptyxis-terminal.h"
+
+/* Stub for VteRegex references. Ptyxis URL matching uses PCRE2 directly. */
+typedef struct _VteRegex VteRegex;
+
+/* Stub for VtePty - PTY lifecycle managed by ghostty */
+typedef struct _VtePty VtePty;
+
+/* Stub for VteEventContext */
+typedef struct _VteEventContext VteEventContext;
+
+/* Stub macros for VTE type checks */
+#define VTE_IS_TERMINAL(t) PTYXIS_IS_TERMINAL(t)
+#define VTE_TERMINAL(t)    ((void*)(t))  /* No longer needed; just pass through */
+#define VTE_TERMINAL_CLASS(k) ((void*)(k))
+#define VTE_TYPE_TERMINAL   PTYXIS_TYPE_TERMINAL
+#define VTE_IS_PTY(p)       TRUE
+#define VTE_TYPE_CURSOR_BLINK_MODE 0
+#define VTE_TYPE_CURSOR_SHAPE      0
+#define VTE_TYPE_ERASE_BINDING     0
+#define VTE_TYPE_TEXT_BLINK_MODE   0
+
+/* VTE property IDs - stubs */
+#define VTE_PROPERTY_ID_CONTAINER_NAME          1
+#define VTE_PROPERTY_ID_CONTAINER_RUNTIME       2
+#define VTE_PROPERTY_ID_CURRENT_DIRECTORY_URI    3
+#define VTE_PROPERTY_ID_CURRENT_FILE_URI         4
+#define VTE_PROPERTY_ID_PROGRESS_HINT            5
+#define VTE_PROPERTY_ID_PROGRESS_VALUE           6
+
+/* VTE progress hints */
+#define VTE_PROGRESS_HINT_ACTIVE         0
+#define VTE_PROGRESS_HINT_ERROR          1
+#define VTE_PROGRESS_HINT_INDETERMINATE  2
+#define VTE_PROGRESS_HINT_PAUSED         3
+
+/* VTE format enums */
+#define VTE_FORMAT_TEXT  0
+#define VTE_FORMAT_HTML  1
+
+/* VTE cursor enums */
+#define VTE_CURSOR_BLINK_SYSTEM   0
+#define VTE_CURSOR_SHAPE_BLOCK    0
+#define VTE_ERASE_AUTO            0
+#define VTE_TEXT_BLINK_ALWAYS     0
+
+/* VTE PCRE2 flags - used for URL regex matching */
+#define VTE_PCRE2_MULTILINE  PCRE2_MULTILINE
+#define VTE_PCRE2_CASELESS   PCRE2_CASELESS
+#define VTE_PCRE2_UCP        PCRE2_UCP
+
+/* VTE version (used in inspector) */
+#define VTE_MAJOR_VERSION 0
+#define VTE_MINOR_VERSION 0
+#define VTE_MICRO_VERSION 0
+#define VTE_VERSION       0
+#define VTE_VERSION_NUMERIC 0
+
+/* VTE termprops (shell integration OSC sequences) */
+#define VTE_TERMPROP_SHELL_PRECMD     "shell-precmd"
+#define VTE_TERMPROP_SHELL_PREEXEC    "shell-preexec"
+#define VTE_TERMPROP_CONTAINER_NAME    "container-name"
+#define VTE_TERMPROP_CONTAINER_RUNTIME "container-runtime"
+
+/* Stub functions for VTE terminal API */
+static inline void
+vte_terminal_set_colors(void *t, void *fg, void *bg, void *palette, int n) { (void)t; (void)fg; (void)bg; (void)palette; (void)n; }
+
+static inline void
+vte_terminal_set_color_cursor(void *t, void *color) { (void)t; (void)color; }
+
+static inline void
+vte_terminal_set_color_cursor_foreground(void *t, void *color) { (void)t; (void)color; }
+
+static inline void
+vte_terminal_feed(void *t, const char *data, int len) { (void)t; (void)data; (void)len; }
+
+static inline void
+vte_terminal_set_pty(void *t, void *pty) { (void)t; (void)pty; }
+
+static inline void *
+vte_terminal_get_pty(void *t) { (void)t; return NULL; }
+
+static inline void
+vte_terminal_set_size(void *t, int cols, int rows) { (void)t; (void)cols; (void)rows; }
+
+static inline void
+vte_terminal_set_input_enabled(void *t, gboolean enabled) { (void)t; (void)enabled; }
+
+static inline gboolean
+vte_terminal_get_input_enabled(void *t) { (void)t; return TRUE; }
+
+static inline void
+vte_terminal_set_scrollback_lines(void *t, int lines) { (void)t; (void)lines; }
+
+static inline guint
+vte_terminal_get_column_count(void *t) { (void)t; return 80; }
+
+static inline guint
+vte_terminal_get_row_count(void *t) { (void)t; return 24; }
+
+static inline gboolean
+vte_terminal_get_has_selection(void *t) { (void)t; return FALSE; }
+
+static inline void
+vte_terminal_select_all(void *t) { (void)t; }
+
+static inline void
+vte_terminal_unselect_all(void *t) { (void)t; }
+
+static inline void
+vte_terminal_reset(void *t, gboolean clear, gboolean clear_screen) { (void)t; (void)clear; (void)clear_screen; }
+
+static inline void
+vte_terminal_paste_clipboard(void *t) { (void)t; }
+
+static inline char *
+vte_terminal_get_window_title(void *t) { (void)t; return NULL; }
+
+static inline void
+vte_terminal_set_font_scale(void *t, double scale) { (void)t; (void)scale; }
+
+static inline void
+vte_terminal_get_cursor_position(void *t, long *col, long *row) { (void)t; if(col) *col=0; if(row) *row=0; }
+
+static inline void
+vte_terminal_set_cell_width_scale(void *t, double scale) { (void)t; (void)scale; }
+
+static inline void
+vte_terminal_set_cell_height_scale(void *t, double scale) { (void)t; (void)scale; }
+
+static inline void
+vte_terminal_get_color_background_for_draw(void *t, void *color) { (void)t; (void)color; }
+
+static inline gboolean
+vte_terminal_get_scroll_on_keystroke(void *t) { (void)t; return TRUE; }
+
+static inline char *
+vte_terminal_get_text_selected(void *t, int format) { (void)t; (void)format; return NULL; }
+
+static inline char *
+vte_terminal_get_font(void *t) { (void)t; return NULL; }
+
+static inline char *
+vte_terminal_get_termprop_string_by_id(void *t, int id, int *len) { (void)t; (void)id; if(len) *len=0; return NULL; }
+
+static inline char *
+vte_terminal_get_termprop_string(void *t, const char *prop, int *len) { (void)t; (void)prop; if(len) *len=0; return NULL; }
+
+static inline gboolean
+vte_terminal_get_termprop_int_by_id(void *t, int id, int *val) { (void)t; (void)id; if(val) *val=0; return TRUE; }
+
+static inline gboolean
+vte_terminal_get_termprop_uint_by_id(void *t, int id, guint *val) { (void)t; (void)id; if(val) *val=0; return TRUE; }
+
+static inline char *
+vte_terminal_ref_termprop_uri_by_id(void *t, int id) { (void)t; (void)id; return NULL; }
+
+static inline char *
+vte_terminal_check_hyperlink_at(void *t, double x, double y) { (void)t; (void)x; (void)y; return NULL; }
+
+static inline char *
+vte_terminal_check_match_at(void *t, double x, double y, int *tag) { (void)t; (void)x; (void)y; if(tag) *tag=0; return NULL; }
+
+static inline int
+vte_terminal_match_add_regex(void *t, void *regex, int flags) { (void)t; (void)regex; (void)flags; return 0; }
+
+static inline void
+vte_terminal_match_remove_all(void *t) { (void)t; }
+
+static inline void
+vte_terminal_match_set_cursor_name(void *t, int tag, const char *name) { (void)t; (void)tag; (void)name; }
+
+static inline void
+vte_terminal_search_set_regex(void *t, void *regex, int flags) { (void)t; (void)regex; (void)flags; }
+
+static inline void
+vte_terminal_search_set_wrap_around(void *t, gboolean wrap) { (void)t; (void)wrap; }
+
+static inline void
+vte_terminal_search_find_next(void *t) { (void)t; }
+
+static inline void
+vte_terminal_search_find_previous(void *t) { (void)t; }
+
+static inline void
+vte_terminal_set_word_char_exceptions(void *t, const char *exceptions) { (void)t; (void)exceptions; }
+
+static inline void
+vte_terminal_set_clear_background(void *t, gboolean clear) { (void)t; (void)clear; }
+
+/* VTE Pty stubs */
+static inline void *
+vte_pty_new_foreign_sync(int fd, void *cancellable, void **error) { (void)fd; (void)cancellable; (void)error; return (void*)1; }
+
+static inline int
+vte_pty_get_fd(void *pty) { (void)pty; return -1; }
+
+static inline void
+vte_pty_set_utf8(void *pty, gboolean utf8, void **error) { (void)pty; (void)utf8; (void)error; }
+
+/* VTE regex stubs */
+static inline void *
+vte_regex_new_for_match(const char *pattern, int len, int flags, void **error) { (void)pattern; (void)len; (void)flags; (void)error; return NULL; }
+
+static inline void *
+vte_regex_new_for_search(const char *pattern, int len, int flags, void **error) { (void)pattern; (void)len; (void)flags; (void)error; return NULL; }
+
+static inline gboolean
+vte_regex_jit(void *regex, int flags, void **error) { (void)regex; (void)flags; (void)error; return TRUE; }
+
+static inline void *
+vte_regex_ref(void *regex) { return regex; }
+
+static inline void
+vte_regex_unref(void *regex) { (void)regex; }
+
+static inline char *
+vte_regex_substitute(void *regex, const char *subject, const char *replacement, void **error) { (void)regex; (void)subject; (void)replacement; (void)error; return NULL; }
+
+/* VTE utilities */
+static inline const char *
+vte_get_features(void) { return "ghostty"; }
+
+static inline int
+vte_get_major_version(void) { return 0; }
+
+static inline int
+vte_get_minor_version(void) { return 0; }
+
+static inline int
+vte_get_micro_version(void) { return 0; }
+
+static inline const char *
+vte_sh_path(void) { return "/bin/sh"; }
+
+/* VTE event context */
+static inline void
+vte_event_context_get_coordinates(const void *ctx, double *x, double *y) { (void)ctx; if(x) *x=0; if(y) *y=0; }

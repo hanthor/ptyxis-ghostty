@@ -34,6 +34,7 @@
 #include "ptyxis-application.h"
 #include "ptyxis-client.h"
 #include "ptyxis-util.h"
+#include "ptyxis-compat.h"
 
 struct _PtyxisClient
 {

@@ -42,6 +42,7 @@ endforeach
 # Widget tests (link against ghostty and GTK)
 widget_tests = {
   'test-ghostty-widget' : {},
+  'test-ghostty-config' : {},
 }
 
 widget_test_deps = [
@@ -51,7 +52,7 @@ widget_test_deps = [
 
 foreach test, params: widget_tests
   test_exe = executable(test,
-    ['@0@.c'.format(test), '../src/ptyxis-ghostty-widget.c'],
+    ['@0@.c'.format(test), '../src/ptyxis-ghostty-widget.c', '../src/ptyxis-ghostty-config.c'],
                  c_args: testsuite_c_args + ['-DGHOSTTY_STATIC'],
            dependencies: widget_test_deps,
           link_args: ptyxis_link_args,

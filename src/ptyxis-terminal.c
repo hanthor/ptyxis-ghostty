@@ -18,6 +18,7 @@
 #include <glib/gi18n.h>
 
 #include "ptyxis-application.h"
+#include "ptyxis-compat.h"
 #include "ptyxis-custom-link.h"
 #include "ptyxis-ghostty-widget.h"
 #include "ptyxis-shortcuts.h"
@@ -79,6 +80,9 @@ struct _PtyxisTerminal
   gboolean               has_selection;
   gboolean               input_enabled;
   gboolean               scroll_on_keystroke;
+
+  /* PTY managed by ptyxis-agent (container-aware) */
+  VtePty                *pty;
 };
 
 enum {
@@ -707,6 +711,7 @@ ptyxis_terminal_dispose(GObject *object)
 {
   PtyxisTerminal *self = PTYXIS_TERMINAL(object);
 
+  g_clear_object(&self->pty);
   g_clear_pointer(&self->ghostty, (GDestroyNotify)gtk_widget_unparent);
 
   g_clear_object(&self->palette);
@@ -1174,4 +1179,22 @@ ptyxis_terminal_get_input_enabled(PtyxisTerminal *self)
   if (self->ghostty != NULL)
     return ptyxis_ghostty_widget_get_input_enabled(self->ghostty);
   return TRUE;
+}
+
+void
+ptyxis_terminal_set_pty(PtyxisTerminal *self, VtePty *pty)
+{
+  g_return_if_fail(PTYXIS_IS_TERMINAL(self));
+
+  g_set_object(&self->pty, pty);
+
+  if (self->ghostty != NULL && pty != NULL)
+    ptyxis_ghostty_widget_attach_pty(self->ghostty, vte_pty_get_fd(pty));
+}
+
+VtePty *
+ptyxis_terminal_get_pty(PtyxisTerminal *self)
+{
+  g_return_val_if_fail(PTYXIS_IS_TERMINAL(self), NULL);
+  return self->pty;
 }

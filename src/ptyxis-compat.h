@@ -15,8 +15,8 @@ static inline void vte_regex_free(VteRegex *r) { g_free(r); }
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(VteRegex, vte_regex_free)
 
 /* VtePty - proper GObject wrapping a PTY master fd.
- * g_set_object / g_clear_object require a real GObject type. */
-typedef struct _VtePty      VtePty;
+ * g_set_object / g_clear_object require a real GObject type.
+ * VtePty is forward-declared in ptyxis-terminal.h; full definition here. */
 typedef struct _VtePtyClass VtePtyClass;
 
 GType vte_pty_get_type (void);
@@ -153,10 +153,19 @@ vte_terminal_feed(void *t, const char *data, int len)
 }
 
 static inline void
-vte_terminal_set_pty(void *t, void *pty) { (void)t; (void)pty; }
+vte_terminal_set_pty(void *t, void *pty)
+{
+  if (t && PTYXIS_IS_TERMINAL(t))
+    ptyxis_terminal_set_pty(PTYXIS_TERMINAL(t), pty ? VTE_PTY(pty) : NULL);
+}
 
 static inline void *
-vte_terminal_get_pty(void *t) { (void)t; return NULL; }
+vte_terminal_get_pty(void *t)
+{
+  if (t && PTYXIS_IS_TERMINAL(t))
+    return ptyxis_terminal_get_pty(PTYXIS_TERMINAL(t));
+  return NULL;
+}
 
 static inline void
 vte_terminal_set_size(void *t, int cols, int rows) { (void)t; (void)cols; (void)rows; }

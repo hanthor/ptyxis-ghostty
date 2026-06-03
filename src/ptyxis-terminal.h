@@ -15,6 +15,9 @@
 
 G_BEGIN_DECLS
 
+/* Forward declaration; full definition in ptyxis-compat.h */
+typedef struct _VtePty VtePty;
+
 #define PTYXIS_TYPE_TERMINAL (ptyxis_terminal_get_type())
 
 G_DECLARE_FINAL_TYPE(PtyxisTerminal,
@@ -52,5 +55,8 @@ void            ptyxis_terminal_get_background_rgba (PtyxisTerminal *self,
                                                      GdkRGBA        *out_color);
 void            ptyxis_terminal_set_input_enabled   (PtyxisTerminal *self, gboolean enabled);
 gboolean        ptyxis_terminal_get_input_enabled   (PtyxisTerminal *self);
+
+void            ptyxis_terminal_set_pty             (PtyxisTerminal *self, VtePty *pty);
+VtePty         *ptyxis_terminal_get_pty             (PtyxisTerminal *self);
 
 G_END_DECLS

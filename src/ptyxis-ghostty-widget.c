@@ -1092,6 +1092,63 @@ ptyxis_ghostty_widget_class_init(PtyxisGhosttyWidgetClass *klass)
 
 /* ---- Public API ---- */
 
+void
+ptyxis_ghostty_widget_attach_pty(PtyxisGhosttyWidget *self, int fd)
+{
+  g_return_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self));
+
+  /* Tear down any self-spawned child and its PTY */
+  if (self->pty_watch_id != 0)
+    {
+      g_source_remove(self->pty_watch_id);
+      self->pty_watch_id = 0;
+    }
+
+  if (self->child_watch_id != 0)
+    {
+      g_source_remove(self->child_watch_id);
+      self->child_watch_id = 0;
+    }
+
+  if (self->child_pid > 0)
+    {
+      kill(self->child_pid, SIGTERM);
+      self->child_pid = -1;
+    }
+
+  if (self->pty_fd >= 0)
+    {
+      close(self->pty_fd);
+      self->pty_fd = -1;
+    }
+
+  if (fd < 0)
+    return;
+
+  self->pty_fd = dup(fd);
+  if (self->pty_fd < 0)
+    {
+      g_warning("ptyxis_ghostty_widget_attach_pty: dup failed: %s", g_strerror(errno));
+      return;
+    }
+
+  /* Push current terminal size to the PTY master */
+  if (self->cols > 0 && self->rows > 0)
+    {
+      struct winsize ws = {
+        .ws_row    = (unsigned short)self->rows,
+        .ws_col    = (unsigned short)self->cols,
+        .ws_xpixel = (unsigned short)(self->cols * self->cell_width),
+        .ws_ypixel = (unsigned short)(self->rows * self->cell_height),
+      };
+      ioctl(self->pty_fd, TIOCSWINSZ, &ws);
+    }
+
+  if (gtk_widget_get_realized(GTK_WIDGET(self)))
+    self->pty_watch_id = g_unix_fd_add(self->pty_fd, G_IO_IN | G_IO_HUP | G_IO_ERR,
+                                        pty_readable_cb, self);
+}
+
 PtyxisGhosttyWidget *
 ptyxis_ghostty_widget_new(void)
 {

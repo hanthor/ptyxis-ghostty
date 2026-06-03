@@ -55,6 +55,9 @@ void                 ptyxis_ghostty_widget_set_input_enabled (PtyxisGhosttyWidge
                                                               gboolean             enabled);
 gboolean             ptyxis_ghostty_widget_get_input_enabled (PtyxisGhosttyWidget *self);
 
+void                 ptyxis_ghostty_widget_attach_pty        (PtyxisGhosttyWidget *self,
+                                                              int                  fd);
+
 void                 ptyxis_ghostty_widget_search_start   (PtyxisGhosttyWidget *self,
                                                            const char          *needle);
 void                 ptyxis_ghostty_widget_search_next    (PtyxisGhosttyWidget *self);

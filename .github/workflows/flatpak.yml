@@ -28,7 +28,8 @@ jobs:
           cd subprojects/ghostty
           zig build -Doptimize=ReleaseFast -Dapp-runtime=none
           mkdir -p "${{ github.workspace }}/ghostty-build/ghostty"
-          cp zig-out/lib/libghostty.so "${{ github.workspace }}/ghostty-build/"
+          cp zig-out/lib/libghostty.so "${{ github.workspace }}/ghostty-build/" 2>/dev/null || \
+            find zig-out -name 'libghostty*.so' -o -name 'ghostty-internal.so' | head -1 | xargs -I{} cp {} "${{ github.workspace }}/ghostty-build/libghostty.so"
           cp include/ghostty.h "${{ github.workspace }}/ghostty-build/"
           cp -r include/ghostty/* "${{ github.workspace }}/ghostty-build/ghostty/"
           ls -la "${{ github.workspace }}/ghostty-build/"

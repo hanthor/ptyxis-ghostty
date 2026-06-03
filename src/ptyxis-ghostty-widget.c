@@ -378,21 +378,21 @@ ptyxis_ghostty_widget_snapshot(GtkWidget *widget, GtkSnapshot *snapshot)
   if (self->cell_width <= 0 || self->cell_height <= 0)
     return;
 
-  /* Get render state colors */
   GhosttyRenderStateColors colors = GHOSTTY_INIT_SIZED(GhosttyRenderStateColors);
   ghostty_render_state_colors_get(self->render_state, &colors);
 
-  /* Default background fill — background is always present in the colors struct */
   GdkRGBA bg_default = color_rgb_to_rgba(colors.background);
 
+  /* Full-widget background as a fast color node */
   gtk_snapshot_append_color(snapshot, &bg_default,
     &GRAPHENE_RECT_INIT(0, 0, width, height));
 
-  /* Get a Cairo context spanning the full widget for Pango text rendering */
+  /* Single Cairo node for ALL cell drawing: backgrounds, text, cursor.
+   * Everything must go into Cairo — appending GTK color nodes after this
+   * node would overdraw the text. */
   graphene_rect_t full_bounds = GRAPHENE_RECT_INIT(0, 0, width, height);
   cairo_t *cr = gtk_snapshot_append_cairo(snapshot, &full_bounds);
 
-  /* Set up Pango layout for rendering */
   PangoLayout *layout = pango_cairo_create_layout(cr);
   PangoFontDescription *fdesc = pango_font_description_copy(self->font_desc);
   pango_font_description_set_size(fdesc,
@@ -400,7 +400,12 @@ ptyxis_ghostty_widget_snapshot(GtkWidget *widget, GtkSnapshot *snapshot)
   pango_layout_set_font_description(layout, fdesc);
   pango_font_description_free(fdesc);
 
-  /* Create row iterator */
+  /* Get font metrics for vertical baseline offset */
+  PangoFontMetrics *metrics = pango_context_get_metrics(
+    pango_layout_get_context(layout), fdesc, NULL);
+  int ascent_px = PANGO_PIXELS(pango_font_metrics_get_ascent(metrics));
+  pango_font_metrics_unref(metrics);
+
   GhosttyRenderStateRowIterator row_iter = NULL;
   ghostty_render_state_row_iterator_new(NULL, &row_iter);
   ghostty_render_state_get(self->render_state,
@@ -426,13 +431,11 @@ ptyxis_ghostty_widget_snapshot(GtkWidget *widget, GtkSnapshot *snapshot)
         {
           int cell_left = col_x * self->cell_width;
 
-          /* Get style */
           GhosttyStyle style = GHOSTTY_INIT_SIZED(GhosttyStyle);
           ghostty_render_state_row_cells_get(cells,
                                              GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_STYLE,
                                              &style);
 
-          /* Get resolved colors */
           GhosttyColorRgb fg_c, bg_c;
           ghostty_render_state_row_cells_get(cells,
                                              GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_FG_COLOR,
@@ -444,17 +447,17 @@ ptyxis_ghostty_widget_snapshot(GtkWidget *widget, GtkSnapshot *snapshot)
           GdkRGBA fg = color_rgb_to_rgba(fg_c);
           GdkRGBA bg = color_rgb_to_rgba(bg_c);
 
-          /* Draw cell background only if it differs from the terminal default */
+          /* Cell background in Cairo (same layer as text, correct z-order) */
           if (bg.red   != bg_default.red   ||
               bg.green != bg_default.green ||
               bg.blue  != bg_default.blue)
             {
-              gtk_snapshot_append_color(snapshot, &bg,
-                &GRAPHENE_RECT_INIT(cell_left, cell_top,
-                                    self->cell_width, self->cell_height));
+              cairo_set_source_rgba(cr, bg.red, bg.green, bg.blue, bg.alpha);
+              cairo_rectangle(cr, cell_left, cell_top,
+                              self->cell_width, self->cell_height);
+              cairo_fill(cr);
             }
 
-          /* Get grapheme codepoints */
           uint32_t grapheme_len = 0;
           ghostty_render_state_row_cells_get(cells,
                                              GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_LEN,
@@ -468,34 +471,28 @@ ptyxis_ghostty_widget_snapshot(GtkWidget *widget, GtkSnapshot *snapshot)
                                                  GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_UTF8,
                                                  &gbuf);
               utf8_buf[gbuf.len] = '\0';
-              const char *text = (const char *)utf8_buf;
 
-              /* Apply bold/italic via Pango attributes */
               PangoAttrList *attrs = pango_attr_list_new();
 
               if (style.bold)
                 pango_attr_list_insert(attrs,
                   pango_attr_weight_new(PANGO_WEIGHT_BOLD));
-
               if (style.italic)
                 pango_attr_list_insert(attrs,
                   pango_attr_style_new(PANGO_STYLE_ITALIC));
-
               if (style.underline != GHOSTTY_SGR_UNDERLINE_NONE)
                 pango_attr_list_insert(attrs,
                   pango_attr_underline_new(PANGO_UNDERLINE_SINGLE));
-
               if (style.strikethrough)
                 pango_attr_list_insert(attrs,
                   pango_attr_strikethrough_new(TRUE));
 
               pango_layout_set_attributes(layout, attrs);
               pango_attr_list_unref(attrs);
+              pango_layout_set_text(layout, (const char *)utf8_buf, -1);
 
-              pango_layout_set_text(layout, text, -1);
-
-              /* Draw text */
-              cairo_move_to(cr, cell_left, cell_top);
+              /* Position text so the baseline sits correctly within the cell */
+              cairo_move_to(cr, cell_left, cell_top + ascent_px - PANGO_PIXELS(pango_layout_get_baseline(layout)));
               cairo_set_source_rgba(cr, fg.red, fg.green, fg.blue, fg.alpha);
               pango_cairo_show_layout(cr, layout);
             }
@@ -506,18 +503,17 @@ ptyxis_ghostty_widget_snapshot(GtkWidget *widget, GtkSnapshot *snapshot)
       row_y++;
     }
 
-  /* Draw cursor */
+  /* Cursor — drawn in Cairo so it layers correctly over text */
   bool cursor_visible = false;
   ghostty_render_state_get(self->render_state,
                            GHOSTTY_RENDER_STATE_DATA_CURSOR_VISIBLE,
                            &cursor_visible);
-
   bool cursor_in_viewport = false;
   ghostty_render_state_get(self->render_state,
                            GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_HAS_VALUE,
                            &cursor_in_viewport);
 
-  if (cursor_visible && cursor_in_viewport && self->has_focus)
+  if (cursor_visible && cursor_in_viewport)
     {
       uint16_t cx = 0, cy = 0;
       ghostty_render_state_get(self->render_state,
@@ -529,14 +525,31 @@ ptyxis_ghostty_widget_snapshot(GtkWidget *widget, GtkSnapshot *snapshot)
       if (colors.cursor_has_value)
         cursor_color = color_rgb_to_rgba(colors.cursor);
 
-      gtk_snapshot_append_color(snapshot, &cursor_color,
-        &GRAPHENE_RECT_INIT(cx * self->cell_width,
-                            cy * self->cell_height,
-                            self->cell_width,
-                            self->cell_height));
+      if (self->has_focus)
+        {
+          /* Filled block cursor */
+          cairo_set_source_rgba(cr,
+            cursor_color.red, cursor_color.green,
+            cursor_color.blue, cursor_color.alpha);
+          cairo_rectangle(cr,
+            cx * self->cell_width, cy * self->cell_height,
+            self->cell_width, self->cell_height);
+          cairo_fill(cr);
+        }
+      else
+        {
+          /* Hollow cursor when unfocused */
+          cairo_set_source_rgba(cr,
+            cursor_color.red, cursor_color.green,
+            cursor_color.blue, 0.6);
+          cairo_set_line_width(cr, 1.0);
+          cairo_rectangle(cr,
+            cx * self->cell_width + 0.5, cy * self->cell_height + 0.5,
+            self->cell_width - 1.0, self->cell_height - 1.0);
+          cairo_stroke(cr);
+        }
     }
 
-  /* Reset global dirty state */
   GhosttyRenderStateDirty clean = GHOSTTY_RENDER_STATE_DIRTY_FALSE;
   ghostty_render_state_set(self->render_state,
                            GHOSTTY_RENDER_STATE_OPTION_DIRTY, &clean);

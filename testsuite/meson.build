@@ -4,6 +4,10 @@ test_env = [
   'G_DEBUG=gc-friendly',
   'GSETTINGS_BACKEND=memory',
   'MALLOC_CHECK_=2',
+  # Suppress a11y bus errors in headless CI (fatal in GTK4/Fedora 43)
+  'GTK_A11Y=none',
+  # Force X11 backend so Xvfb is used; avoids Wayland/XDG_RUNTIME_DIR issues
+  'GDK_BACKEND=x11',
 ]
 
 testsuite_c_args = [

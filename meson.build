@@ -46,7 +46,7 @@ app_schema_shortcuts_path = '@0@Shortcuts/'.format(app_schema_path)
 
 glib_req_version = '2.80'
 gtk_req_version = '4.14'
-adwaita_req_version = '1.8'
+adwaita_req_version = '1.7'
 json_glib_req_version = '1.6'
 
 glib_req = '>= @0@'.format(glib_req_version)

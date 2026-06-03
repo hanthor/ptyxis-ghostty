@@ -1,3 +1,18 @@
+# Ptyxis Ghostty — Container-native terminal powered by libghostty
+
+> [!WARNING]
+> **Fork notice**: This is a fork of Ptyxis that replaces the VTE terminal
+> backend with [libghostty](https://github.com/ghostty-org/ghostty).
+> Work in progress — compiles and passes tests, rendering pipeline under active development.
+
+## Quick Install (Flatpak)
+
+```bash
+curl -L https://nightly.link/hanthor/ptyxis-ghostty/workflows/flatpak/main/PtyxisGhostty.zip -o PtyxisGhostty.zip && unzip -o PtyxisGhostty.zip && flatpak install --user --reinstall PtyxisGhostty.flatpak
+```
+
+---
+
 ![Ptyxis Logo](https://gitlab.gnome.org/chergert/ptyxis/-/raw/main/data/icons/ptyxis.svg)
 
 [![License: GPL v3+](https://img.shields.io/badge/License-GPL%20v3%2B-blue.svg)](https://gitlab.gnome.org/chergert/ptyxis/-/blob/main/COPYING)

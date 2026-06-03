@@ -398,13 +398,13 @@ ptyxis_ghostty_widget_snapshot(GtkWidget *widget, GtkSnapshot *snapshot)
   pango_font_description_set_size(fdesc,
     pango_font_description_get_size(self->font_desc) * self->font_scale);
   pango_layout_set_font_description(layout, fdesc);
-  pango_font_description_free(fdesc);
 
-  /* Get font metrics for vertical baseline offset */
+  /* Get font metrics for vertical baseline offset (must happen before free) */
   PangoFontMetrics *metrics = pango_context_get_metrics(
     pango_layout_get_context(layout), fdesc, NULL);
   int ascent_px = PANGO_PIXELS(pango_font_metrics_get_ascent(metrics));
   pango_font_metrics_unref(metrics);
+  pango_font_description_free(fdesc);
 
   GhosttyRenderStateRowIterator row_iter = NULL;
   ghostty_render_state_row_iterator_new(NULL, &row_iter);

@@ -11,7 +11,8 @@
         "--share=network",
         "--socket=fallback-x11",
         "--socket=wayland",
-        "--talk-name=org.freedesktop.Flatpak"
+        "--talk-name=org.freedesktop.Flatpak",
+        "--own-name=org.gnome.Ptyxis.Devel"
     ],
     "x-run-args": [
         "--standalone"
@@ -50,23 +51,16 @@
             "name": "ghostty",
             "buildsystem": "simple",
             "build-commands": [
-                "install -Dm755 libghostty.so /app/lib/libghostty.so",
-                "install -Dm644 ghostty.h /app/include/ghostty.h",
-                "mkdir -p /app/include/ghostty/vt",
-                "install -Dm644 vt.h /app/include/ghostty/vt.h"
+                "install -Dm755 lib/libghostty-vt.so.0.1.0 /app/lib/libghostty-vt.so.0.1.0",
+                "ln -sf libghostty-vt.so.0.1.0 /app/lib/libghostty-vt.so.0",
+                "ln -sf libghostty-vt.so.0 /app/lib/libghostty-vt.so",
+                "cp -r include/ghostty /app/include/ghostty",
+                "install -Dm644 include/ghostty.h /app/include/ghostty.h"
             ],
             "sources": [
                 {
-                    "type": "file",
-                    "path": "ghostty-build/libghostty.so"
-                },
-                {
-                    "type": "file",
-                    "path": "ghostty-build/ghostty.h"
-                },
-                {
-                    "type": "file",
-                    "path": "ghostty-build/ghostty/vt.h"
+                    "type": "dir",
+                    "path": "subprojects/ghostty/zig-out"
                 }
             ]
         },

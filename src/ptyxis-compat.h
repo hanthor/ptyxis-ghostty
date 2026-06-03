@@ -14,13 +14,20 @@ typedef struct _VteRegex { int dummy; } VteRegex;
 static inline void vte_regex_free(VteRegex *r) { g_free(r); }
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(VteRegex, vte_regex_free)
 
-/* Stub for VtePty - PTY lifecycle managed by ghostty.
- * Defined as an opaque GObject type so g_autoptr works.
- * Stores the raw PTY master FD for container integration. */
-#define VTE_TYPE_PTY (0)
-typedef struct _VtePty { int fd; } VtePty;
-static inline void vte_pty_free(VtePty *p) { if (p) { if (p->fd >= 0) close(p->fd); g_free(p); } }
-G_DEFINE_AUTOPTR_CLEANUP_FUNC(VtePty, vte_pty_free)
+/* VtePty - proper GObject wrapping a PTY master fd.
+ * g_set_object / g_clear_object require a real GObject type. */
+typedef struct _VtePty      VtePty;
+typedef struct _VtePtyClass VtePtyClass;
+
+GType vte_pty_get_type (void);
+#define VTE_TYPE_PTY     (vte_pty_get_type ())
+#define VTE_IS_PTY(p)    (G_TYPE_CHECK_INSTANCE_TYPE ((p), VTE_TYPE_PTY))
+#define VTE_PTY(p)       (G_TYPE_CHECK_INSTANCE_CAST ((p), VTE_TYPE_PTY, VtePty))
+
+struct _VtePtyClass { GObjectClass parent_class; };
+struct _VtePty      { GObject parent_instance; int fd; };
+
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(VtePty, g_object_unref)
 
 /* Stub for VteEventContext */
 typedef struct _VteEventContext VteEventContext;
@@ -263,13 +270,13 @@ vte_terminal_set_clear_background(void *t, gboolean clear) { (void)t; (void)clea
 
 /* VTE Pty stubs — real FD storage for container integration */
 
-static inline void *
+static inline VtePty *
 vte_pty_new_foreign_sync(int fd, void *cancellable, void **error)
 {
   (void)cancellable;
   if (error) *error = NULL;
   if (fd < 0) return NULL;
-  VtePty *pty = g_new0(VtePty, 1);
+  VtePty *pty = (VtePty *)g_object_new (VTE_TYPE_PTY, NULL);
   pty->fd = fd;
   return pty;
 }

@@ -83,7 +83,7 @@ foreach test, params: widget_tests
       include_directories('..'),
       include_directories('.'),
       include_directories('../src'),
-      include_directories(ghty_include),
+      include_directories(ghty_vt_include),
     ],
   )
   if not params.get('skip', false)

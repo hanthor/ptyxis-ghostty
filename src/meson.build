@@ -83,10 +83,10 @@ configure_file(
     install_dir: get_option('datadir') / 'glib-2.0' / 'schemas',
 )
 
-# Ghostty: built externally via scripts/build-ghostty.sh or CI
+# libghostty-vt: built from the ghostty submodule
 ghty_prefix = get_option('ghostty_prefix')
-ghty_include = ghty_prefix != '' ? ghty_prefix / 'include' : '../subprojects/ghostty/include'
-ghty_libdir = ghty_prefix != '' ? ghty_prefix / 'lib' : '../subprojects/ghostty/zig-out/lib'
+ghty_vt_include = ghty_prefix != '' ? ghty_prefix / 'include' : '../subprojects/ghostty/zig-out/include'
+ghty_libdir     = ghty_prefix != '' ? ghty_prefix / 'lib'     : '../subprojects/ghostty/zig-out/lib'
 
 ptyxis_deps = [
   dependency('gio-unix-2.0', version: glib_req),
@@ -115,12 +115,12 @@ ptyxis_include_directories = [
   include_directories('.'),
   include_directories('..'),
   include_directories('../agent'),
-  include_directories(ghty_include),
+  include_directories(ghty_vt_include),
 ]
 
 ptyxis_link_args = [
   '-L' + ghty_libdir,
-  '-lghostty',
+  '-lghostty-vt',
   '-lxml2',
   '-Wl,-rpath,' + ghty_libdir,
 ]

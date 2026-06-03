@@ -531,7 +531,7 @@ ptyxis_client_create_pty (PtyxisClient  *self,
   if (fd == -1)
     return NULL;
 
-  pty = g_new0(VtePty, 1);
+  pty = (VtePty *)g_object_new (VTE_TYPE_PTY, NULL);
   pty->fd = fd;
   /* fd is now owned by pty; don't close it here */
 

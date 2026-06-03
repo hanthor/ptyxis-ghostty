@@ -1,11 +1,40 @@
 /*
  * ptyxis-compat.c
  *
- * GType registration for VTE compatibility enum types.
- * These GTypes are needed by g_param_spec_enum() in PtyxisSettings and PtyxisTab.
+ * GType registration for VTE compatibility types.
+ * VtePty is a real GObject so g_set_object/g_clear_object work on it.
  */
 
 #include "ptyxis-compat.h"
+#include <unistd.h>
+
+/* ---- VtePty GObject ---- */
+
+G_DEFINE_TYPE (VtePty, vte_pty, G_TYPE_OBJECT)
+
+static void
+vte_pty_finalize (GObject *object)
+{
+  VtePty *self = VTE_PTY (object);
+  if (self->fd >= 0)
+    {
+      close (self->fd);
+      self->fd = -1;
+    }
+  G_OBJECT_CLASS (vte_pty_parent_class)->finalize (object);
+}
+
+static void
+vte_pty_class_init (VtePtyClass *klass)
+{
+  G_OBJECT_CLASS (klass)->finalize = vte_pty_finalize;
+}
+
+static void
+vte_pty_init (VtePty *self)
+{
+  self->fd = -1;
+}
 
 GType
 ptyxis_cursor_blink_mode_get_type(void)

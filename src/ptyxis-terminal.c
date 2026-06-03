@@ -50,8 +50,6 @@ struct _PtyxisTerminal
 
   /* Ghostty integration */
   PtyxisGhosttyWidget   *ghostty;
-  ghostty_app_t          app;           /* Shared app instance */
-  ghostty_config_t       config;        /* Per-terminal config */
 
   PtyxisShortcuts       *shortcuts;
   PtyxisPalette         *palette;
@@ -98,6 +96,7 @@ enum {
   SHELL_PRECMD,
   SHELL_PREEXEC,
   SLEWED,        /* Kept for API compat with existing signal consumers */
+  CONTENTS_CHANGED,
   N_SIGNALS
 };
 
@@ -112,70 +111,60 @@ static const char * const url_regexes_str[] = {
   REGEX_EMAIL,
 };
 
-/* Ghostty action callback dispatcher */
+/* Signal handlers from PtyxisGhosttyWidget */
+
 static void
-ptyxis_terminal_action_cb(ghostty_action_tag_e tag,
-                          const ghostty_action_u *action,
-                          gpointer user_data)
+ptyxis_terminal_contents_changed_cb(PtyxisTerminal *self)
 {
-  PtyxisTerminal *self = PTYXIS_TERMINAL(user_data);
+  g_signal_emit(self, signals[CONTENTS_CHANGED], 0);
+}
 
-  switch (tag)
-    {
-    case GHOSTTY_ACTION_SET_TITLE:
-      /* Title changes are handled by PtyxisTab via tab-monitor */
-      break;
+static void
+ptyxis_terminal_on_grid_size_changed(PtyxisGhosttyWidget *widget,
+                                      guint                cols,
+                                      guint                rows,
+                                      guint                cell_width,
+                                      guint                cell_height,
+                                      PtyxisTerminal      *self)
+{
+  (void)widget;
+  self->cell_width  = (int)cell_width;
+  self->cell_height = (int)cell_height;
+  self->n_columns   = (int)cols;
+  self->n_rows      = (int)rows;
+  g_signal_emit(self, signals[GRID_SIZE_CHANGED], 0,
+                self->n_columns, self->n_rows);
+}
 
-    case GHOSTTY_ACTION_PWD:
-      /* Working directory tracking - forwarded to PtyxisTab */
-      break;
+static void
+ptyxis_terminal_on_bell(PtyxisGhosttyWidget *widget,
+                         PtyxisTerminal      *self)
+{
+  (void)widget;
+  (void)self;
+  /* Visual bell handled by PtyxisTab */
+}
 
-    case GHOSTTY_ACTION_MOUSE_OVER_LINK:
-      if (action->mouse_over_link.url != NULL)
-        {
-          g_set_str(&self->url, g_strndup(action->mouse_over_link.url,
-                                           action->mouse_over_link.len));
-        }
-      else
-        {
-          g_clear_pointer(&self->url, g_free);
-        }
-      break;
+static void
+ptyxis_terminal_on_title_changed(PtyxisGhosttyWidget *widget,
+                                   const char          *title,
+                                   PtyxisTerminal      *self)
+{
+  (void)widget;
+  (void)title;
+  (void)self;
+  /* Title changes are surfaced via tab-monitor watching the VT */
+}
 
-    case GHOSTTY_ACTION_CELL_SIZE:
-      self->cell_width = action->cell_size.width;
-      self->cell_height = action->cell_size.height;
-
-      ptyxis_ghostty_widget_get_size(self->ghostty, &(PtyxisGhosttySize){0});
-      self->n_columns = action->cell_size.width > 0 ?
-        gtk_widget_get_width(GTK_WIDGET(self)) / MAX(1, action->cell_size.width) : 80;
-      self->n_rows = action->cell_size.height > 0 ?
-        gtk_widget_get_height(GTK_WIDGET(self)) / MAX(1, action->cell_size.height) : 24;
-
-      g_signal_emit(self, signals[GRID_SIZE_CHANGED], 0,
-                    self->n_columns, self->n_rows);
-      break;
-
-    case GHOSTTY_ACTION_COMMAND_FINISHED:
-      g_signal_emit(self, signals[SHELL_PRECMD], 0);
-      break;
-
-    case GHOSTTY_ACTION_CLOSE_WINDOW:
-    case GHOSTTY_ACTION_CLOSE_TAB:
-      /* Let tabs handle this */
-      break;
-
-    case GHOSTTY_ACTION_RING_BELL:
-      /* Visual bell handled by PtyxisTab */
-      break;
-
-    case GHOSTTY_ACTION_PROGRESS_REPORT:
-      /* OSC 9;4 progress reports - handled by PtyxisTab */
-      break;
-
-    default:
-      break;
-    }
+static void
+ptyxis_terminal_on_child_exited(PtyxisGhosttyWidget *widget,
+                                 int                  status,
+                                 PtyxisTerminal      *self)
+{
+  (void)widget;
+  (void)status;
+  (void)self;
+  /* TODO: close tab on child exit */
 }
 
 /* --- Color / Palette --- */
@@ -186,8 +175,6 @@ ptyxis_terminal_update_colors(PtyxisTerminal *self)
   const PtyxisPaletteFace *face;
   AdwStyleManager *style_manager;
   gboolean dark;
-  ghostty_config_palette_s palette = {0};
-  ghostty_config_color_s fg, bg;
 
   g_assert(PTYXIS_IS_TERMINAL(self));
 
@@ -200,40 +187,12 @@ ptyxis_terminal_update_colors(PtyxisTerminal *self)
 
   self->background = face->background;
 
-  /* Build ghostty palette from Ptyxis face */
-  fg = (ghostty_config_color_s){
-    .r = (uint8_t)(face->foreground.red * 255),
-    .g = (uint8_t)(face->foreground.green * 255),
-    .b = (uint8_t)(face->foreground.blue * 255),
-  };
-  bg = (ghostty_config_color_s){
-    .r = (uint8_t)(face->background.red * 255),
-    .g = (uint8_t)(face->background.green * 255),
-    .b = (uint8_t)(face->background.blue * 255),
-  };
+  /* TODO: feed palette into libghostty-vt terminal via
+   * GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND/BACKGROUND/PALETTE once
+   * PtyxisGhosttyWidget exposes an update_colors() method */
+  (void)face;
 
-  for (guint i = 0; i < MIN(G_N_ELEMENTS(face->indexed), 256); i++)
-    {
-      palette.colors[i] = (ghostty_config_color_s){
-        .r = (uint8_t)(face->indexed[i].red * 255),
-        .g = (uint8_t)(face->indexed[i].green * 255),
-        .b = (uint8_t)(face->indexed[i].blue * 255),
-      };
-    }
-
-  /* Apply to ghostty config */
-  if (self->config != NULL)
-    {
-      ghostty_config_get(self->config, &fg, "foreground", 10);
-      ghostty_config_get(self->config, &bg, "background", 10);
-      ghostty_config_get(self->config, &palette, "palette", 7);
-      if (self->ghostty != NULL)
-        {
-          ghostty_surface_t surface = ptyxis_ghostty_widget_get_surface(self->ghostty);
-          if (surface != NULL)
-            ghostty_surface_update_config(surface, self->config);
-        }
-    }
+  gtk_widget_queue_draw(GTK_WIDGET(self));
 }
 
 static void
@@ -761,7 +720,6 @@ ptyxis_terminal_finalize(GObject *object)
   g_clear_pointer(&self->url, g_free);
   g_clear_pointer(&self->current_container_name, g_free);
   g_clear_pointer(&self->current_container_runtime, g_free);
-  g_clear_pointer(&self->config, ghostty_config_free);
   g_clear_pointer(&self->custom_links, g_hash_table_unref);
 
   G_OBJECT_CLASS(ptyxis_terminal_parent_class)->finalize(object);
@@ -916,6 +874,15 @@ ptyxis_terminal_class_init(PtyxisTerminalClass *klass)
                  NULL,
                  G_TYPE_NONE, 0);
 
+  signals[CONTENTS_CHANGED] =
+    g_signal_new("contents-changed",
+                 G_TYPE_FROM_CLASS(klass),
+                 G_SIGNAL_RUN_LAST,
+                 0,
+                 NULL, NULL,
+                 NULL,
+                 G_TYPE_NONE, 0);
+
   gtk_widget_class_set_template_from_resource(widget_class,
     "/org/gnome/Ptyxis/ptyxis-terminal.ui");
 
@@ -964,15 +931,19 @@ ptyxis_terminal_init(PtyxisTerminal *self)
   g_set_object(&self->shortcuts, shortcuts);
 
   gtk_widget_init_template(GTK_WIDGET(self));
-  /* Create default ghostty config */
-  if (self->config == NULL)
-    self->config = ghostty_config_new();
 
   /* Create the ghostty widget child */
-  self->ghostty = ptyxis_ghostty_widget_new(self->app, NULL, self->config);
-  ptyxis_ghostty_widget_set_action_callback(self->ghostty,
-                                            ptyxis_terminal_action_cb,
-                                            self);
+  self->ghostty = ptyxis_ghostty_widget_new();
+  g_signal_connect(self->ghostty, "grid-size-changed",
+                   G_CALLBACK(ptyxis_terminal_on_grid_size_changed), self);
+  g_signal_connect(self->ghostty, "bell",
+                   G_CALLBACK(ptyxis_terminal_on_bell), self);
+  g_signal_connect(self->ghostty, "title-changed",
+                   G_CALLBACK(ptyxis_terminal_on_title_changed), self);
+  g_signal_connect(self->ghostty, "child-exited",
+                   G_CALLBACK(ptyxis_terminal_on_child_exited), self);
+  g_signal_connect_swapped(self->ghostty, "contents-changed",
+                           G_CALLBACK(ptyxis_terminal_contents_changed_cb), self);
   gtk_widget_set_parent(GTK_WIDGET(self->ghostty), GTK_WIDGET(self));
 
   /* Listen to shortcuts */

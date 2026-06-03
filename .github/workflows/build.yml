@@ -16,23 +16,22 @@ jobs:
         with:
           version: 0.15.2
 
-      - name: Build libghostty
+      - name: Build libghostty-vt
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq gettext
           cd subprojects/ghostty
           zig build -Doptimize=ReleaseFast -Dapp-runtime=none
+          echo "=== zig-out/lib ==="
+          ls -la zig-out/lib/
+          # Copy the versioned VT library and create symlinks
           mkdir -p "${{ github.workspace }}/ghostty-out/lib"
           mkdir -p "${{ github.workspace }}/ghostty-out/include"
-          find zig-out -name "ghostty-internal.so" -exec cp {} \
-               "${{ github.workspace }}/ghostty-out/lib/libghostty.so" \;
-          # Also keep static libs (for VT tests)
-          find zig-out \( -name "ghostty-internal.a" -o -name "libghostty*.a" \) \
-               -exec cp {} "${{ github.workspace }}/ghostty-out/lib/" \;
-          # Rename ghostty-internal.a for -lghostty linking
-          if [ -f "${{ github.workspace }}/ghostty-out/lib/ghostty-internal.a" ]; then
-            mv "${{ github.workspace }}/ghostty-out/lib/ghostty-internal.a" \
-               "${{ github.workspace }}/ghostty-out/lib/libghostty.a"
-          fi
+          cp zig-out/lib/libghostty-vt.so.0.1.0 \
+             "${{ github.workspace }}/ghostty-out/lib/libghostty-vt.so.0.1.0"
+          ln -sf libghostty-vt.so.0.1.0 \
+             "${{ github.workspace }}/ghostty-out/lib/libghostty-vt.so.0"
+          ln -sf libghostty-vt.so.0 \
+             "${{ github.workspace }}/ghostty-out/lib/libghostty-vt.so"
           cp include/ghostty.h "${{ github.workspace }}/ghostty-out/include/"
           cp -r include/ghostty "${{ github.workspace }}/ghostty-out/include/"
           ls -la "${{ github.workspace }}/ghostty-out/lib/"
@@ -47,13 +46,18 @@ jobs:
             -e LIBRARY_PATH=/ghostty/lib \
             -e C_INCLUDE_PATH=/ghostty/include \
             -e LD_LIBRARY_PATH=/ghostty/lib \
+            -e LIBGL_ALWAYS_SOFTWARE=1 \
+            -e GALLIUM_DRIVER=llvmpipe \
             fedora:43 bash -c '
             dnf install -y --setopt=install_weak_deps=False \
               meson gcc gettext desktop-file-utils appstream \
               glib2-devel gtk4-devel libadwaita-devel \
               json-glib-devel git pkgconf-pkg-config libportal-gtk4-devel \
-              libxml2-devel xorg-x11-server-Xvfb &&
-            meson setup builddir -Dghostty_prefix=/ghostty &&
+              libxml2-devel mesa-dri-drivers xorg-x11-server-Xvfb &&
+            meson setup builddir \
+              -Dghostty_prefix=/ghostty \
+              -Dlibc-compat=true \
+              -Ddevelopment=true &&
             meson compile -C builddir &&
             xvfb-run -a meson test -C builddir --print-errorlogs
             '

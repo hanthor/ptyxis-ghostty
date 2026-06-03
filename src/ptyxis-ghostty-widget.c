@@ -1004,7 +1004,10 @@ focus_enter_cb(GtkEventControllerFocus *focus,
     {
       if (ghostty_focus_encode(GHOSTTY_FOCUS_GAINED, buf, sizeof(buf), &written)
           == GHOSTTY_SUCCESS && written > 0)
-        (void)write(self->pty_fd, buf, written);
+        {
+          ssize_t ignored G_GNUC_UNUSED;
+          ignored = write(self->pty_fd, buf, written);
+        }
     }
 }
 
@@ -1025,7 +1028,10 @@ focus_leave_cb(GtkEventControllerFocus *focus,
     {
       if (ghostty_focus_encode(GHOSTTY_FOCUS_LOST, buf, sizeof(buf), &written)
           == GHOSTTY_SUCCESS && written > 0)
-        (void)write(self->pty_fd, buf, written);
+        {
+          ssize_t ignored G_GNUC_UNUSED;
+          ignored = write(self->pty_fd, buf, written);
+        }
     }
 }
 

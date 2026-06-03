@@ -1271,7 +1271,6 @@ ptyxis_window_undo_close_tab_action (GtkWidget  *widget,
 }
 
 static void
-static void
 preferences_window_destroyed_cb (GtkWindow    *prefs_window,
                                   PtyxisWindow *self)
 {

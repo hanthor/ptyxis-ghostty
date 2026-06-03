@@ -958,6 +958,9 @@ ptyxis_terminal_init(PtyxisTerminal *self)
   g_set_object(&self->shortcuts, shortcuts);
 
   gtk_widget_init_template(GTK_WIDGET(self));
+  /* Create default ghostty config */
+  if (self->config == NULL)
+    self->config = ghostty_config_new();
 
   /* Create the ghostty widget child */
   self->ghostty = ptyxis_ghostty_widget_new(self->app, NULL, self->config);

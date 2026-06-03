@@ -124,12 +124,12 @@
         <signal name="drag-leave" handler="ptyxis_terminal_drop_target_drag_leave" swapped="1" object="PtyxisTerminal"/>
       </object>
     </child>
-    <property name="context-menu">
+        <child>
       <object class="GtkPopoverMenu" id="popover">
         <property name="has-arrow">false</property>
         <property name="menu-model">terminal_menu</property>
       </object>
-    </property>
+        </child>
     <child>
       <object class="GtkRevealer" id="size_revealer">
         <property name="transition-type">crossfade</property>

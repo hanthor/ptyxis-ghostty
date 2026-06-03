@@ -28,6 +28,7 @@
 #include "ptyxis-application.h"
 #include "ptyxis-palette.h"
 #include "ptyxis-util.h"
+#include "ptyxis-ghostty-widget.h"
 
 static gint64 default_rlimit_nofile;
 
@@ -226,6 +227,10 @@ main (int   argc,
   bump_to_max_fd_limit ();
 
   gtk_init ();
+
+  /* Initialize ghostty library */
+  if (ghostty_init(argc, argv) != 0)
+    g_error("Failed to initialize ghostty library");
 
   app = ptyxis_application_new (APP_ID, flags);
   ret = g_application_run (G_APPLICATION (app), argc, argv);

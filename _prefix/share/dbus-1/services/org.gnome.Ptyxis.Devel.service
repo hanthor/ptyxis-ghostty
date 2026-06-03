@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=org.gnome.Ptyxis.Devel
+Exec=/var/home/james/dev/ptyxis-ghostty-build/_prefix/bin/ptyxis --gapplication-service

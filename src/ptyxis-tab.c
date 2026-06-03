@@ -966,21 +966,21 @@ ptyxis_tab_constructed (GObject *object)
 //   g_object_bind_property (settings, "audible-bell",
 //                           self->terminal, "audible-bell",
 //                           G_BINDING_SYNC_CREATE);
-//   g_object_bind_property (settings, "cursor-shape",
-//                           self->terminal, "cursor-shape",
-//                           G_BINDING_SYNC_CREATE);
-//   g_object_bind_property (settings, "cursor-blink-mode",
-//                           self->terminal, "cursor-blink-mode",
-//                           G_BINDING_SYNC_CREATE);
+  g_object_bind_property (settings, "cursor-shape",
+                          self->terminal, "cursor-shape",
+                          G_BINDING_SYNC_CREATE);
+  g_object_bind_property (settings, "cursor-blink-mode",
+                          self->terminal, "cursor-blink-mode",
+                          G_BINDING_SYNC_CREATE);
 //   g_object_bind_property (settings, "enable-a11y",
 //                           self->terminal, "enable-a11y",
 //                           G_BINDING_SYNC_CREATE);
-//   g_object_bind_property (settings, "font-desc",
-//                           self->terminal, "font-desc",
-//                           G_BINDING_SYNC_CREATE);
-//   g_object_bind_property (settings, "text-blink-mode",
-//                           self->terminal, "text-blink-mode",
-//                         G_BINDING_SYNC_CREATE);
+  g_object_bind_property (settings, "font-desc",
+                          self->terminal, "font-desc",
+                          G_BINDING_SYNC_CREATE);
+  g_object_bind_property (settings, "text-blink-mode",
+                          self->terminal, "text-blink-mode",
+                          G_BINDING_SYNC_CREATE);
   g_object_bind_property (settings, "ignore-osc-title",
                           self, "ignore-osc-title",
                           G_BINDING_SYNC_CREATE);

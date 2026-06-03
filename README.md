@@ -64,7 +64,8 @@ and performance.
 - **Modern GNOME Interface**: Built with GTK 4 and libadwaita for a native,
   responsive, and accessible user experience, adhering to GNOME HIG.
 - **Dynamic Theming & Customization**: Extensive built-in color palettes that
-  automatically adapt to system light/dark modes. Supports user-installable
+  automatically adapt to system light/dark modes, with custom font descriptions, cursor shape,
+  and blinking configurations fully bridged. Supports user-installable
   custom `.palette` files and "Window Dressing" for full-window theming.
 - **Smart Process Tracking**: Visual indicators for `sudo` sessions, active
   SSH connections, and other foreground processes, enhancing situational

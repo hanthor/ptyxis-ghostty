@@ -12,6 +12,7 @@
 #include <gtk/gtk.h>
 #include <ghostty/vt.h>
 #include "ptyxis-palette.h"
+#include "ptyxis-compat.h"
 
 G_BEGIN_DECLS
 
@@ -31,6 +32,8 @@ typedef struct {
 } PtyxisGhosttySize;
 
 PtyxisGhosttyWidget *ptyxis_ghostty_widget_new         (void);
+
+GhosttyTerminal      ptyxis_ghostty_widget_get_terminal (PtyxisGhosttyWidget *self);
 
 void                 ptyxis_ghostty_widget_get_size     (PtyxisGhosttyWidget *self,
                                                          PtyxisGhosttySize   *size);
@@ -55,6 +58,18 @@ void                 ptyxis_ghostty_widget_get_background_rgba(PtyxisGhosttyWidg
 void                 ptyxis_ghostty_widget_set_input_enabled (PtyxisGhosttyWidget *self,
                                                               gboolean             enabled);
 gboolean             ptyxis_ghostty_widget_get_input_enabled (PtyxisGhosttyWidget *self);
+
+void                 ptyxis_ghostty_widget_set_font_desc (PtyxisGhosttyWidget    *self,
+                                                          const PangoFontDescription *font_desc);
+
+void                 ptyxis_ghostty_widget_set_cursor_shape(PtyxisGhosttyWidget *self,
+                                                            PtyxisCursorShape    shape);
+
+void                 ptyxis_ghostty_widget_set_cursor_blink_mode(PtyxisGhosttyWidget *self,
+                                                                 PtyxisCursorBlinkMode mode);
+
+void                 ptyxis_ghostty_widget_set_text_blink_mode(PtyxisGhosttyWidget *self,
+                                                               PtyxisTextBlinkMode  mode);
 
 void                 ptyxis_ghostty_widget_update_colors     (PtyxisGhosttyWidget    *self,
                                                               const PtyxisPaletteFace *face);

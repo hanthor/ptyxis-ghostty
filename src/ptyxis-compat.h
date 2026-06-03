@@ -37,7 +37,6 @@ typedef struct _VteEventContext VteEventContext;
 #define VTE_TERMINAL(t)    ((void*)(t))  /* No longer needed; just pass through */
 #define VTE_TERMINAL_CLASS(k) ((void*)(k))
 #define VTE_TYPE_TERMINAL   PTYXIS_TYPE_TERMINAL
-#define VTE_IS_PTY(p)       TRUE
 /* Replacement enums for VTE cursor/erase/blink types */
 
 GType ptyxis_erase_binding_get_type(void);
@@ -110,9 +109,9 @@ typedef enum {
 #define VTE_FORMAT_HTML  1
 
 /* VTE PCRE2 flags - used for URL regex matching */
-#define VTE_PCRE2_MULTILINE  PCRE2_MULTILINE
-#define VTE_PCRE2_CASELESS   PCRE2_CASELESS
-#define VTE_PCRE2_UCP        PCRE2_UCP
+#define VTE_PCRE2_MULTILINE  0x00000400u
+#define VTE_PCRE2_CASELESS   0x00000008u
+#define VTE_PCRE2_UCP        0x00020000u
 
 /* VTE version (used in inspector) */
 #define VTE_MAJOR_VERSION 0
@@ -189,10 +188,20 @@ static inline void
 vte_terminal_set_scrollback_lines(void *t, int lines) { (void)t; (void)lines; }
 
 static inline guint
-vte_terminal_get_column_count(void *t) { (void)t; return 80; }
+vte_terminal_get_column_count(void *t)
+{
+  if (t && PTYXIS_IS_TERMINAL(t))
+    return ptyxis_terminal_get_n_columns(PTYXIS_TERMINAL(t));
+  return 80;
+}
 
 static inline guint
-vte_terminal_get_row_count(void *t) { (void)t; return 24; }
+vte_terminal_get_row_count(void *t)
+{
+  if (t && PTYXIS_IS_TERMINAL(t))
+    return ptyxis_terminal_get_n_rows(PTYXIS_TERMINAL(t));
+  return 24;
+}
 
 static inline gboolean
 vte_terminal_get_has_selection(void *t) { (void)t; return FALSE; }
@@ -204,7 +213,12 @@ static inline void
 vte_terminal_unselect_all(void *t) { (void)t; }
 
 static inline void
-vte_terminal_reset(void *t, gboolean clear, gboolean clear_screen) { (void)t; (void)clear; (void)clear_screen; }
+vte_terminal_reset(void *t, gboolean clear, gboolean clear_screen)
+{
+  (void)clear;
+  if (t && PTYXIS_IS_TERMINAL(t))
+    ptyxis_terminal_reset(PTYXIS_TERMINAL(t), clear_screen);
+}
 
 static inline void
 vte_terminal_paste_clipboard(void *t) { (void)t; }
@@ -243,7 +257,12 @@ vte_terminal_get_color_background_for_draw(void *t, void *color)
 }
 
 static inline gboolean
-vte_terminal_get_scroll_on_keystroke(void *t) { (void)t; return TRUE; }
+vte_terminal_get_scroll_on_keystroke(void *t)
+{
+  if (t && PTYXIS_IS_TERMINAL(t))
+    return ptyxis_terminal_get_scroll_on_keystroke(PTYXIS_TERMINAL(t));
+  return TRUE;
+}
 
 static inline char *
 vte_terminal_get_text_selected(void *t, int format) { (void)t; (void)format; return NULL; }
@@ -310,10 +329,11 @@ vte_terminal_set_clear_background(void *t, gboolean clear) { (void)t; (void)clea
 static inline VtePty *
 vte_pty_new_foreign_sync(int fd, void *cancellable, void **error)
 {
+  VtePty *pty;
   (void)cancellable;
   if (error) *error = NULL;
   if (fd < 0) return NULL;
-  VtePty *pty = (VtePty *)g_object_new (VTE_TYPE_PTY, NULL);
+  pty = (VtePty *)g_object_new (VTE_TYPE_PTY, NULL);
   pty->fd = fd;
   return pty;
 }

@@ -68,9 +68,23 @@ struct _PtyxisGhosttyWidget
   char    *title;
   char    *cwd;
   gboolean has_focus;
+  gboolean input_enabled;
 
   /* Selection */
   gboolean has_selection;
+  GhosttySelectionGesture     sel_gesture;
+  GhosttySelectionGestureEvent sel_press_event;
+  GhosttySelectionGestureEvent sel_drag_event;
+  GhosttySelectionGestureEvent sel_release_event;
+  gboolean                    sel_dragging;  /* left-button drag in progress */
+
+  /* Search */
+  char    *search_needle;
+  guint    search_flags;    /* PCRE2 flags (CASELESS etc.) */
+  gboolean search_wrap;     /* wrap-around */
+  GArray  *search_offsets;  /* array of guint: byte offsets of matches in text dump */
+  guint    search_col_len;  /* terminal column count when offsets were built */
+  int      search_current;  /* index into search_offsets, -1 = none */
 
   /* Input controllers */
   GtkEventController *key_controller;
@@ -82,6 +96,14 @@ struct _PtyxisGhosttyWidget
   /* Mouse state */
   double mouse_x;
   double mouse_y;
+
+  /* Blinking and Cursor settings */
+  PtyxisCursorShape cursor_shape;
+  PtyxisCursorBlinkMode cursor_blink_mode;
+  PtyxisTextBlinkMode text_blink_mode;
+  guint blink_timeout_id;
+  gboolean cursor_blink_state;
+  gboolean text_blink_state;
 };
 
 G_DEFINE_FINAL_TYPE(PtyxisGhosttyWidget,
@@ -99,9 +121,14 @@ static void ptyxis_ghostty_widget_size_allocate(GtkWidget *widget, int width, in
                                                 int baseline);
 static gboolean ptyxis_ghostty_widget_grab_focus(GtkWidget *widget);
 
-static void update_cell_metrics (PtyxisGhosttyWidget *self);
-static void resize_terminal     (PtyxisGhosttyWidget *self, int width, int height);
-static void start_child         (PtyxisGhosttyWidget *self);
+static void update_cell_metrics    (PtyxisGhosttyWidget *self);
+static void resize_terminal        (PtyxisGhosttyWidget *self, int width, int height);
+static void start_child            (PtyxisGhosttyWidget *self);
+static void update_blink_timer     (PtyxisGhosttyWidget *self);
+static gboolean pixel_to_grid_ref  (PtyxisGhosttyWidget *self, double x, double y,
+                                    GhosttyGridRef *out_ref);
+static void search_invalidate      (PtyxisGhosttyWidget *self);
+static void search_install_match   (PtyxisGhosttyWidget *self);
 
 /* ---- terminal effect callbacks ---- */
 
@@ -110,10 +137,12 @@ on_terminal_write_pty(GhosttyTerminal terminal, void *userdata,
                       const uint8_t *data, size_t len)
 {
   PtyxisGhosttyWidget *self = PTYXIS_GHOSTTY_WIDGET(userdata);
+  ssize_t res;
   (void)terminal;
   if (self->pty_fd < 0)
     return;
-  write(self->pty_fd, data, len);
+  res = write(self->pty_fd, data, len);
+  (void)res;
 }
 
 static void
@@ -131,7 +160,7 @@ on_terminal_title_changed(GhosttyTerminal terminal, void *userdata)
   GhosttyString str = {0};
   ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_TITLE, &str);
   g_free(self->title);
-  self->title = str.len > 0 ? g_strndup(str.ptr, str.len) : NULL;
+  self->title = str.len > 0 ? g_strndup((const char *)str.ptr, str.len) : NULL;
   g_signal_emit(self, signals[TITLE_CHANGED], 0, self->title);
 }
 
@@ -403,16 +432,48 @@ static void
 ptyxis_ghostty_widget_snapshot(GtkWidget *widget, GtkSnapshot *snapshot)
 {
   PtyxisGhosttyWidget *self = PTYXIS_GHOSTTY_WIDGET(widget);
-  int width  = gtk_widget_get_width(widget);
-  int height = gtk_widget_get_height(widget);
+  int width;
+  int height;
+  GhosttyRenderStateColors colors = GHOSTTY_INIT_SIZED(GhosttyRenderStateColors);
+  GdkRGBA bg_default;
+  graphene_rect_t full_bounds;
+  cairo_t *cr;
+  PangoLayout *layout;
+  PangoFontDescription *fdesc;
+  PangoFontMetrics *metrics;
+  int ascent_px;
+  GhosttyRenderStateRowIterator row_iter = NULL;
+  GhosttyRenderStateRowCells cells = NULL;
+  int row_y = 0;
+  int cell_top;
+  int col_x;
+  int cell_left;
+  GhosttyStyle style;
+  GhosttyColorRgb fg_c;
+  GhosttyColorRgb bg_c;
+  GdkRGBA fg;
+  GdkRGBA bg;
+  uint32_t grapheme_len;
+  uint8_t utf8_buf[32];
+  GhosttyBuffer gbuf;
+  PangoAttrList *attrs;
+  bool cursor_visible;
+  bool cursor_in_viewport;
+  uint16_t cx;
+  uint16_t cy;
+  GdkRGBA cursor_color;
+  GhosttyRenderStateDirty clean;
+  gboolean draw_text;
 
   if (self->cell_width <= 0 || self->cell_height <= 0)
     return;
 
-  GhosttyRenderStateColors colors = GHOSTTY_INIT_SIZED(GhosttyRenderStateColors);
+  width  = gtk_widget_get_width(widget);
+  height = gtk_widget_get_height(widget);
+
   ghostty_render_state_colors_get(self->render_state, &colors);
 
-  GdkRGBA bg_default = color_rgb_to_rgba(colors.background);
+  bg_default = color_rgb_to_rgba(colors.background);
 
   /* Full-widget background as a fast color node */
   gtk_snapshot_append_color(snapshot, &bg_default,
@@ -421,54 +482,52 @@ ptyxis_ghostty_widget_snapshot(GtkWidget *widget, GtkSnapshot *snapshot)
   /* Single Cairo node for ALL cell drawing: backgrounds, text, cursor.
    * Everything must go into Cairo — appending GTK color nodes after this
    * node would overdraw the text. */
-  graphene_rect_t full_bounds = GRAPHENE_RECT_INIT(0, 0, width, height);
-  cairo_t *cr = gtk_snapshot_append_cairo(snapshot, &full_bounds);
+  full_bounds = GRAPHENE_RECT_INIT(0, 0, width, height);
+  cr = gtk_snapshot_append_cairo(snapshot, &full_bounds);
 
-  PangoLayout *layout = pango_cairo_create_layout(cr);
-  PangoFontDescription *fdesc = pango_font_description_copy(self->font_desc);
+  layout = pango_cairo_create_layout(cr);
+  fdesc = pango_font_description_copy(self->font_desc);
   pango_font_description_set_size(fdesc,
     pango_font_description_get_size(self->font_desc) * self->font_scale);
   pango_layout_set_font_description(layout, fdesc);
 
   /* Get font metrics for vertical baseline offset (must happen before free) */
-  PangoFontMetrics *metrics = pango_context_get_metrics(
+  metrics = pango_context_get_metrics(
     pango_layout_get_context(layout), fdesc, NULL);
-  int ascent_px = PANGO_PIXELS(pango_font_metrics_get_ascent(metrics));
+  ascent_px = PANGO_PIXELS(pango_font_metrics_get_ascent(metrics));
   pango_font_metrics_unref(metrics);
   pango_font_description_free(fdesc);
 
-  GhosttyRenderStateRowIterator row_iter = NULL;
   ghostty_render_state_row_iterator_new(NULL, &row_iter);
   ghostty_render_state_get(self->render_state,
                            GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR,
                            &row_iter);
 
-  GhosttyRenderStateRowCells cells = NULL;
   ghostty_render_state_row_cells_new(NULL, &cells);
 
-  int row_y = 0;
+  row_y = 0;
 
   while (ghostty_render_state_row_iterator_next(row_iter))
     {
-      int cell_top = row_y * self->cell_height;
+      cell_top = row_y * self->cell_height;
 
       ghostty_render_state_row_get(row_iter,
                                    GHOSTTY_RENDER_STATE_ROW_DATA_CELLS,
                                    &cells);
 
-      int col_x = 0;
+      col_x = 0;
 
       while (ghostty_render_state_row_cells_next(cells))
         {
-          int cell_left = col_x * self->cell_width;
+          cell_left = col_x * self->cell_width;
 
-          GhosttyStyle style = GHOSTTY_INIT_SIZED(GhosttyStyle);
+          style = GHOSTTY_INIT_SIZED(GhosttyStyle);
           ghostty_render_state_row_cells_get(cells,
                                              GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_STYLE,
                                              &style);
 
-          GhosttyColorRgb fg_c = colors.foreground;
-          GhosttyColorRgb bg_c = colors.background;
+          fg_c = colors.foreground;
+          bg_c = colors.background;
           /* FG/BG return GHOSTTY_INVALID_VALUE for default-color cells */
           ghostty_render_state_row_cells_get(cells,
                                              GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_FG_COLOR,
@@ -477,8 +536,8 @@ ptyxis_ghostty_widget_snapshot(GtkWidget *widget, GtkSnapshot *snapshot)
                                              GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_BG_COLOR,
                                              &bg_c);
 
-          GdkRGBA fg = color_rgb_to_rgba(fg_c);
-          GdkRGBA bg = color_rgb_to_rgba(bg_c);
+          fg = color_rgb_to_rgba(fg_c);
+          bg = color_rgb_to_rgba(bg_c);
 
           /* Cell background in Cairo (same layer as text, correct z-order) */
           if (bg.red   != bg_default.red   ||
@@ -491,21 +550,47 @@ ptyxis_ghostty_widget_snapshot(GtkWidget *widget, GtkSnapshot *snapshot)
               cairo_fill(cr);
             }
 
-          uint32_t grapheme_len = 0;
+          grapheme_len = 0;
           ghostty_render_state_row_cells_get(cells,
                                              GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_LEN,
                                              &grapheme_len);
 
-          if (grapheme_len > 0)
+          draw_text = TRUE;
+          if (style.blink)
             {
-              uint8_t utf8_buf[32] = {0};
-              GhosttyBuffer gbuf = { .ptr = utf8_buf, .cap = sizeof(utf8_buf) - 1, .len = 0 };
+              gboolean should_blink = FALSE;
+              switch (self->text_blink_mode)
+                {
+                case PTYXIS_TEXT_BLINK_ALWAYS:
+                  should_blink = TRUE;
+                  break;
+                case PTYXIS_TEXT_BLINK_FOCUSED:
+                  should_blink = self->has_focus;
+                  break;
+                case PTYXIS_TEXT_BLINK_UNFOCUSED:
+                  should_blink = !self->has_focus;
+                  break;
+                case PTYXIS_TEXT_BLINK_NEVER:
+                default:
+                  should_blink = FALSE;
+                  break;
+                }
+              if (should_blink && !self->text_blink_state)
+                draw_text = FALSE;
+            }
+
+          if (draw_text && grapheme_len > 0)
+            {
+              memset(utf8_buf, 0, sizeof(utf8_buf));
+              gbuf.ptr = utf8_buf;
+              gbuf.cap = sizeof(utf8_buf) - 1;
+              gbuf.len = 0;
               ghostty_render_state_row_cells_get(cells,
                                                  GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_UTF8,
                                                  &gbuf);
               utf8_buf[gbuf.len] = '\0';
 
-              PangoAttrList *attrs = pango_attr_list_new();
+              attrs = pango_attr_list_new();
 
               if (style.bold)
                 pango_attr_list_insert(attrs,
@@ -537,37 +622,61 @@ ptyxis_ghostty_widget_snapshot(GtkWidget *widget, GtkSnapshot *snapshot)
     }
 
   /* Cursor — drawn in Cairo so it layers correctly over text */
-  bool cursor_visible = false;
+  cursor_visible = false;
   ghostty_render_state_get(self->render_state,
                            GHOSTTY_RENDER_STATE_DATA_CURSOR_VISIBLE,
                            &cursor_visible);
-  bool cursor_in_viewport = false;
+  cursor_in_viewport = false;
   ghostty_render_state_get(self->render_state,
                            GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_HAS_VALUE,
                            &cursor_in_viewport);
 
-  if (cursor_visible && cursor_in_viewport)
+  if (cursor_visible && cursor_in_viewport && (!self->has_focus || self->cursor_blink_state))
     {
-      uint16_t cx = 0, cy = 0;
+      cx = 0;
+      cy = 0;
       ghostty_render_state_get(self->render_state,
                                GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_X, &cx);
       ghostty_render_state_get(self->render_state,
                                GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_Y, &cy);
 
-      GdkRGBA cursor_color = {1.0, 1.0, 1.0, 0.85};
+      cursor_color.red = 1.0;
+      cursor_color.green = 1.0;
+      cursor_color.blue = 1.0;
+      cursor_color.alpha = 0.85;
       if (colors.cursor_has_value)
         cursor_color = color_rgb_to_rgba(colors.cursor);
 
       if (self->has_focus)
         {
-          /* Filled block cursor */
           cairo_set_source_rgba(cr,
             cursor_color.red, cursor_color.green,
             cursor_color.blue, cursor_color.alpha);
-          cairo_rectangle(cr,
-            cx * self->cell_width, cy * self->cell_height,
-            self->cell_width, self->cell_height);
-          cairo_fill(cr);
+
+          if (self->cursor_shape == PTYXIS_CURSOR_SHAPE_BLOCK)
+            {
+              /* Filled block cursor */
+              cairo_rectangle(cr,
+                cx * self->cell_width, cy * self->cell_height,
+                self->cell_width, self->cell_height);
+              cairo_fill(cr);
+            }
+          else if (self->cursor_shape == PTYXIS_CURSOR_SHAPE_IBEAM)
+            {
+              /* I-beam cursor */
+              cairo_set_line_width(cr, 2.0);
+              cairo_move_to(cr, cx * self->cell_width + 1.0, cy * self->cell_height);
+              cairo_line_to(cr, cx * self->cell_width + 1.0, (cy + 1) * self->cell_height);
+              cairo_stroke(cr);
+            }
+          else if (self->cursor_shape == PTYXIS_CURSOR_SHAPE_UNDERLINE)
+            {
+              /* Underline cursor */
+              cairo_set_line_width(cr, 2.0);
+              cairo_move_to(cr, cx * self->cell_width, (cy + 1) * self->cell_height - 1.0);
+              cairo_line_to(cr, (cx + 1) * self->cell_width, (cy + 1) * self->cell_height - 1.0);
+              cairo_stroke(cr);
+            }
         }
       else
         {
@@ -583,7 +692,7 @@ ptyxis_ghostty_widget_snapshot(GtkWidget *widget, GtkSnapshot *snapshot)
         }
     }
 
-  GhosttyRenderStateDirty clean = GHOSTTY_RENDER_STATE_DIRTY_FALSE;
+  clean = GHOSTTY_RENDER_STATE_DIRTY_FALSE;
   ghostty_render_state_set(self->render_state,
                            GHOSTTY_RENDER_STATE_OPTION_DIRTY, &clean);
 
@@ -744,6 +853,59 @@ keyval_to_ghostty_key(guint keyval)
     }
 }
 
+/* ---- pixel-to-grid conversion ---- */
+
+static gboolean
+pixel_to_grid_ref(PtyxisGhosttyWidget *self, double x, double y,
+                  GhosttyGridRef *out_ref)
+{
+  int col = (int)x / self->cell_width;
+  int row = (int)y / self->cell_height;
+  GhosttyPoint point;
+
+  col = CLAMP(col, 0, self->cols - 1);
+  row = CLAMP(row, 0, self->rows - 1);
+
+  point.tag = GHOSTTY_POINT_TAG_VIEWPORT;
+  point.value.coordinate.x = (uint16_t)col;
+  point.value.coordinate.y = (uint32_t)row;
+
+  return ghostty_terminal_grid_ref(self->terminal, point, out_ref) == GHOSTTY_SUCCESS;
+}
+
+/* ---- search engine ---- */
+
+static void
+search_invalidate(PtyxisGhosttyWidget *self)
+{
+  g_return_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self));
+
+  g_clear_pointer(&self->search_needle, g_free);
+  g_clear_pointer(&self->search_offsets, g_array_unref);
+  self->search_current = -1;
+  self->search_col_len = 0;
+  self->search_flags = 0;
+}
+
+static void
+search_install_match(PtyxisGhosttyWidget *self)
+{
+  g_return_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self));
+  g_return_if_fail(self->search_offsets != NULL);
+
+  if (self->search_current < 0 || (guint)self->search_current >= self->search_offsets->len)
+    {
+      ghostty_terminal_set(self->terminal, GHOSTTY_TERMINAL_OPT_SELECTION, NULL);
+      return;
+    }
+
+  /* For now, just clear the selection when no match is found.
+   * A full implementation would convert byte offset → (col, row) and set selection.
+   * This stub prevents crashes and allows search_next/previous to be called safely. */
+  ghostty_terminal_set(self->terminal, GHOSTTY_TERMINAL_OPT_SELECTION, NULL);
+  gtk_widget_queue_draw(GTK_WIDGET(self));
+}
+
 static void
 encode_and_write_key(PtyxisGhosttyWidget *self,
                      GhosttyKeyAction     action,
@@ -754,6 +916,7 @@ encode_and_write_key(PtyxisGhosttyWidget *self,
   GhosttyKeyEvent key_event = NULL;
   char buf[128];
   size_t written = 0;
+  ssize_t res;
 
   if (self->pty_fd < 0)
     return;
@@ -770,7 +933,10 @@ encode_and_write_key(PtyxisGhosttyWidget *self,
                               buf, sizeof(buf), &written);
 
   if (written > 0)
-    write(self->pty_fd, buf, written);
+    {
+      res = write(self->pty_fd, buf, written);
+      (void)res;
+    }
 
   ghostty_key_event_free(key_event);
 }
@@ -782,9 +948,16 @@ key_pressed_cb(GtkEventControllerKey *key,
                GdkModifierType        state,
                PtyxisGhosttyWidget   *self)
 {
-  (void)keycode;
   char utf8[8] = {0};
   guint32 unichar;
+  (void)keycode;
+  if (!self->input_enabled)
+    return GDK_EVENT_PROPAGATE;
+
+  /* Clear any active selection when the user types */
+  ghostty_terminal_set(self->terminal, GHOSTTY_TERMINAL_OPT_SELECTION, NULL);
+  self->sel_dragging = FALSE;
+  search_invalidate(self);
 
   /* Get the Unicode character for this key press, excluding control chars */
   unichar = gdk_keyval_to_unicode(keyval);
@@ -803,6 +976,8 @@ key_released_cb(GtkEventControllerKey *key,
                 PtyxisGhosttyWidget   *self)
 {
   (void)keycode;
+  if (!self->input_enabled)
+    return;
   encode_and_write_key(self, GHOSTTY_KEY_ACTION_RELEASE, keyval, state, NULL);
 }
 
@@ -812,6 +987,7 @@ focus_enter_cb(GtkEventControllerFocus *focus,
 {
   (void)focus;
   self->has_focus = TRUE;
+  update_blink_timer(self);
   gtk_widget_queue_draw(GTK_WIDGET(self));
 }
 
@@ -821,6 +997,7 @@ focus_leave_cb(GtkEventControllerFocus *focus,
 {
   (void)focus;
   self->has_focus = FALSE;
+  update_blink_timer(self);
   gtk_widget_queue_draw(GTK_WIDGET(self));
 }
 
@@ -831,36 +1008,83 @@ click_pressed_cb(GtkGestureClick     *gesture,
                  double               y,
                  PtyxisGhosttyWidget *self)
 {
-  (void)n_press;
-  GhosttyMouseEvent mevent = NULL;
   GdkEvent *gdk_event;
   GdkModifierType state;
   guint button;
-  char buf[64];
-  size_t written = 0;
+  gboolean mouse_tracking;
 
-  if (self->pty_fd < 0)
+  if (self->pty_fd < 0 || !self->input_enabled)
     return;
 
   gdk_event = gtk_event_controller_get_current_event(GTK_EVENT_CONTROLLER(gesture));
   state     = gdk_event_get_modifier_state(gdk_event);
   button    = gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture));
 
-  ghostty_mouse_event_new(NULL, &mevent);
-  ghostty_mouse_event_set_action(mevent, GHOSTTY_MOUSE_ACTION_PRESS);
-  ghostty_mouse_event_set_button(mevent, (GhosttyMouseButton)button);
-  ghostty_mouse_event_set_mods(mevent, gdk_mods_to_ghostty(state));
-  ghostty_mouse_event_set_position(mevent, (GhosttyMousePosition){ .x = (float)x, .y = (float)y });
-
-  ghostty_mouse_encoder_encode(self->mouse_encoder, mevent,
-                                buf, sizeof(buf), &written);
-  if (written > 0)
-    write(self->pty_fd, buf, written);
-
-  ghostty_mouse_event_free(mevent);
-
   self->mouse_x = x;
   self->mouse_y = y;
+
+  /* Check if the terminal has mouse tracking enabled */
+  mouse_tracking = FALSE;
+  ghostty_terminal_get(self->terminal, GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING,
+                       &mouse_tracking);
+
+  /* Left-button without active mouse tracking: drive selection gesture */
+  if (button == GDK_BUTTON_PRIMARY && !mouse_tracking)
+    {
+      GhosttyGridRef ref = GHOSTTY_INIT_SIZED(GhosttyGridRef);
+      GhosttySelection sel = GHOSTTY_INIT_SIZED(GhosttySelection);
+      GdkDevice *device;
+      uint64_t time_ms;
+      uint64_t time_ns;
+
+      if (!pixel_to_grid_ref(self, x, y, &ref))
+        return;
+
+      ghostty_selection_gesture_event_set(self->sel_press_event,
+                                          GHOSTTY_SELECTION_GESTURE_EVENT_OPT_REF,
+                                          &ref);
+
+      /* Feed timing so double/triple-click detection works */
+      device = gdk_event_get_device(gdk_event);
+      time_ms = (uint64_t)gdk_device_get_timestamp(device);
+      time_ns = time_ms * 1000000ULL;
+      ghostty_selection_gesture_event_set(self->sel_press_event,
+                                          GHOSTTY_SELECTION_GESTURE_EVENT_OPT_TIME_NS,
+                                          &time_ns);
+
+      if (ghostty_selection_gesture_event(self->sel_gesture, self->terminal,
+                                           self->sel_press_event, &sel) == GHOSTTY_SUCCESS)
+        {
+          ghostty_terminal_set(self->terminal, GHOSTTY_TERMINAL_OPT_SELECTION, &sel);
+          self->sel_dragging = TRUE;
+          gtk_widget_queue_draw(GTK_WIDGET(self));
+        }
+      return;
+    }
+
+  /* All other buttons (or left with mouse tracking): standard mouse report */
+  {
+    GhosttyMouseEvent mevent = NULL;
+    char buf[64];
+    size_t written = 0;
+    ssize_t res;
+
+    ghostty_mouse_event_new(NULL, &mevent);
+    ghostty_mouse_event_set_action(mevent, GHOSTTY_MOUSE_ACTION_PRESS);
+    ghostty_mouse_event_set_button(mevent, (GhosttyMouseButton)button);
+    ghostty_mouse_event_set_mods(mevent, gdk_mods_to_ghostty(state));
+    ghostty_mouse_event_set_position(mevent, (GhosttyMousePosition){ .x = (float)x, .y = (float)y });
+
+    ghostty_mouse_encoder_encode(self->mouse_encoder, mevent,
+                                  buf, sizeof(buf), &written);
+    if (written > 0)
+      {
+        res = write(self->pty_fd, buf, written);
+        (void)res;
+      }
+
+    ghostty_mouse_event_free(mevent);
+  }
 }
 
 static void
@@ -870,33 +1094,76 @@ click_released_cb(GtkGestureClick     *gesture,
                   double               y,
                   PtyxisGhosttyWidget *self)
 {
-  (void)n_press;
-  GhosttyMouseEvent mevent = NULL;
   GdkEvent *gdk_event;
   GdkModifierType state;
   guint button;
-  char buf[64];
-  size_t written = 0;
+  (void)n_press;
 
-  if (self->pty_fd < 0)
+  if (self->pty_fd < 0 || !self->input_enabled)
     return;
 
   gdk_event = gtk_event_controller_get_current_event(GTK_EVENT_CONTROLLER(gesture));
   state     = gdk_event_get_modifier_state(gdk_event);
   button    = gtk_gesture_single_get_current_button(GTK_GESTURE_SINGLE(gesture));
 
-  ghostty_mouse_event_new(NULL, &mevent);
-  ghostty_mouse_event_set_action(mevent, GHOSTTY_MOUSE_ACTION_RELEASE);
-  ghostty_mouse_event_set_button(mevent, (GhosttyMouseButton)button);
-  ghostty_mouse_event_set_mods(mevent, gdk_mods_to_ghostty(state));
-  ghostty_mouse_event_set_position(mevent, (GhosttyMousePosition){ .x = (float)x, .y = (float)y });
+  if (button == GDK_BUTTON_PRIMARY && self->sel_dragging)
+    {
+      GhosttyGridRef ref = GHOSTTY_INIT_SIZED(GhosttyGridRef);
 
-  ghostty_mouse_encoder_encode(self->mouse_encoder, mevent,
-                                buf, sizeof(buf), &written);
-  if (written > 0)
-    write(self->pty_fd, buf, written);
+      self->sel_dragging = FALSE;
 
-  ghostty_mouse_event_free(mevent);
+      /* Set ref if pointer is over a valid cell, otherwise clear opt */
+      if (pixel_to_grid_ref(self, x, y, &ref))
+        ghostty_selection_gesture_event_set(self->sel_release_event,
+                                             GHOSTTY_SELECTION_GESTURE_EVENT_OPT_REF,
+                                             &ref);
+      else
+        ghostty_selection_gesture_event_set(self->sel_release_event,
+                                             GHOSTTY_SELECTION_GESTURE_EVENT_OPT_REF,
+                                             NULL);
+
+      ghostty_selection_gesture_event(self->sel_gesture, self->terminal,
+                                       self->sel_release_event, NULL);
+
+      /* Copy selection text to PRIMARY clipboard (standard X11 terminal behaviour) */
+      {
+        char *text = ptyxis_ghostty_widget_get_selected_text(self);
+        if (text != NULL)
+          {
+            GdkDisplay  *display = gtk_widget_get_display(GTK_WIDGET(self));
+            GdkClipboard *primary = gdk_display_get_primary_clipboard(display);
+            gdk_clipboard_set_text(primary, text);
+            g_free(text);
+          }
+      }
+
+      gtk_widget_queue_draw(GTK_WIDGET(self));
+      return;
+    }
+
+  /* Standard mouse report for other buttons */
+  {
+    GhosttyMouseEvent mevent = NULL;
+    char buf[64];
+    size_t written = 0;
+    ssize_t res;
+
+    ghostty_mouse_event_new(NULL, &mevent);
+    ghostty_mouse_event_set_action(mevent, GHOSTTY_MOUSE_ACTION_RELEASE);
+    ghostty_mouse_event_set_button(mevent, (GhosttyMouseButton)button);
+    ghostty_mouse_event_set_mods(mevent, gdk_mods_to_ghostty(state));
+    ghostty_mouse_event_set_position(mevent, (GhosttyMousePosition){ .x = (float)x, .y = (float)y });
+
+    ghostty_mouse_encoder_encode(self->mouse_encoder, mevent,
+                                  buf, sizeof(buf), &written);
+    if (written > 0)
+      {
+        res = write(self->pty_fd, buf, written);
+        (void)res;
+      }
+
+    ghostty_mouse_event_free(mevent);
+  }
 }
 
 static void
@@ -908,6 +1175,38 @@ motion_cb(GtkEventControllerMotion *motion,
   (void)motion;
   self->mouse_x = x;
   self->mouse_y = y;
+
+  /* Update drag selection while left button is held */
+  if (self->sel_dragging)
+    {
+      GhosttyGridRef ref = GHOSTTY_INIT_SIZED(GhosttyGridRef);
+      GhosttySelection sel = GHOSTTY_INIT_SIZED(GhosttySelection);
+      GhosttySelectionGestureGeometry geom;
+      int widget_height = gtk_widget_get_height(GTK_WIDGET(self));
+
+      if (!pixel_to_grid_ref(self, x, y, &ref))
+        return;
+
+      ghostty_selection_gesture_event_set(self->sel_drag_event,
+                                           GHOSTTY_SELECTION_GESTURE_EVENT_OPT_REF,
+                                           &ref);
+
+      geom.columns       = (uint32_t)self->cols;
+      geom.cell_width    = (uint32_t)self->cell_width;
+      geom.padding_left  = 0;
+      geom.screen_height = (uint32_t)widget_height;
+
+      ghostty_selection_gesture_event_set(self->sel_drag_event,
+                                           GHOSTTY_SELECTION_GESTURE_EVENT_OPT_GEOMETRY,
+                                           &geom);
+
+      if (ghostty_selection_gesture_event(self->sel_gesture, self->terminal,
+                                           self->sel_drag_event, &sel) == GHOSTTY_SUCCESS)
+        {
+          ghostty_terminal_set(self->terminal, GHOSTTY_TERMINAL_OPT_SELECTION, &sel);
+          gtk_widget_queue_draw(GTK_WIDGET(self));
+        }
+    }
 }
 
 static gboolean
@@ -916,16 +1215,18 @@ scroll_cb(GtkEventControllerScroll *scroll,
           double                    dy,
           PtyxisGhosttyWidget      *self)
 {
-  (void)scroll;
   GhosttyMouseEvent mevent = NULL;
   char buf[64];
   size_t written = 0;
+  GhosttyMouseButton scroll_button;
+  ssize_t res;
+  (void)scroll;
 
-  if (self->pty_fd < 0)
+  if (self->pty_fd < 0 || !self->input_enabled)
     return GDK_EVENT_PROPAGATE;
 
   /* Map scroll to synthetic button 4 (up) / 5 (down) press events */
-  GhosttyMouseButton scroll_button = dy < 0 ? GHOSTTY_MOUSE_BUTTON_FOUR
+  scroll_button = dy < 0 ? GHOSTTY_MOUSE_BUTTON_FOUR
                                              : GHOSTTY_MOUSE_BUTTON_FIVE;
 
   ghostty_mouse_event_new(NULL, &mevent);
@@ -937,13 +1238,83 @@ scroll_cb(GtkEventControllerScroll *scroll,
   ghostty_mouse_encoder_encode(self->mouse_encoder, mevent,
                                 buf, sizeof(buf), &written);
   if (written > 0)
-    write(self->pty_fd, buf, written);
+    {
+      res = write(self->pty_fd, buf, written);
+      (void)res;
+    }
 
   ghostty_mouse_event_free(mevent);
   return GDK_EVENT_STOP;
 }
 
 /* ---- GObject lifecycle ---- */
+
+static gboolean
+blink_timeout_cb(gpointer user_data)
+{
+  PtyxisGhosttyWidget *self = PTYXIS_GHOSTTY_WIDGET(user_data);
+
+  self->cursor_blink_state = !self->cursor_blink_state;
+  self->text_blink_state = !self->text_blink_state;
+
+  gtk_widget_queue_draw(GTK_WIDGET(self));
+
+  return G_SOURCE_CONTINUE;
+}
+
+static void
+update_blink_timer(PtyxisGhosttyWidget *self)
+{
+  gboolean cursor_should_blink = FALSE;
+  gboolean text_should_blink = FALSE;
+  gboolean any_blinking;
+
+  /* Check cursor blinking */
+  if (self->cursor_blink_mode == PTYXIS_CURSOR_BLINK_ON ||
+      self->cursor_blink_mode == PTYXIS_CURSOR_BLINK_SYSTEM)
+    {
+      cursor_should_blink = self->has_focus;
+    }
+
+  /* Check text blinking */
+  switch (self->text_blink_mode)
+    {
+    case PTYXIS_TEXT_BLINK_ALWAYS:
+      text_should_blink = TRUE;
+      break;
+    case PTYXIS_TEXT_BLINK_FOCUSED:
+      text_should_blink = self->has_focus;
+      break;
+    case PTYXIS_TEXT_BLINK_UNFOCUSED:
+      text_should_blink = !self->has_focus;
+      break;
+    case PTYXIS_TEXT_BLINK_NEVER:
+    default:
+      text_should_blink = FALSE;
+      break;
+    }
+
+  any_blinking = cursor_should_blink || text_should_blink;
+
+  if (any_blinking)
+    {
+      if (self->blink_timeout_id == 0)
+        self->blink_timeout_id = g_timeout_add(500, blink_timeout_cb, self);
+    }
+  else
+    {
+      if (self->blink_timeout_id != 0)
+        {
+          g_source_remove(self->blink_timeout_id);
+          self->blink_timeout_id = 0;
+        }
+      /* Ensure visible during static phases */
+      self->cursor_blink_state = TRUE;
+      self->text_blink_state = TRUE;
+    }
+
+  gtk_widget_queue_draw(GTK_WIDGET(self));
+}
 
 static void
 ptyxis_ghostty_widget_init(PtyxisGhosttyWidget *self)
@@ -954,11 +1325,24 @@ ptyxis_ghostty_widget_init(PtyxisGhosttyWidget *self)
     .max_scrollback = DEFAULT_SCROLLBACK,
   };
 
-  self->pty_fd    = -1;
-  self->child_pid = -1;
-  self->font_scale = 1.0;
-  self->cols = DEFAULT_COLS;
-  self->rows = DEFAULT_ROWS;
+  self->pty_fd       = -1;
+  self->child_pid    = -1;
+  self->font_scale   = 1.0;
+  self->cols         = DEFAULT_COLS;
+  self->rows         = DEFAULT_ROWS;
+  self->input_enabled = TRUE;
+
+  /* Blinking and Cursor settings */
+  self->cursor_shape = PTYXIS_CURSOR_SHAPE_BLOCK;
+  self->cursor_blink_mode = PTYXIS_CURSOR_BLINK_SYSTEM;
+  self->text_blink_mode = PTYXIS_TEXT_BLINK_NEVER;
+  self->blink_timeout_id = 0;
+  self->cursor_blink_state = TRUE;
+  self->text_blink_state = TRUE;
+
+  /* Search state */
+  self->search_wrap = TRUE;
+  self->search_current = -1;
 
   /* Default font */
   self->font_desc = pango_font_description_from_string(DEFAULT_FONT_DESC);
@@ -1057,6 +1441,12 @@ ptyxis_ghostty_widget_dispose(GObject *object)
       self->child_pid = -1;
     }
 
+  if (self->blink_timeout_id != 0)
+    {
+      g_source_remove(self->blink_timeout_id);
+      self->blink_timeout_id = 0;
+    }
+
   G_OBJECT_CLASS(ptyxis_ghostty_widget_parent_class)->dispose(object);
 }
 
@@ -1065,9 +1455,11 @@ ptyxis_ghostty_widget_finalize(GObject *object)
 {
   PtyxisGhosttyWidget *self = PTYXIS_GHOSTTY_WIDGET(object);
 
-  g_clear_pointer(&self->title,     g_free);
-  g_clear_pointer(&self->cwd,       g_free);
-  g_clear_pointer(&self->font_desc, pango_font_description_free);
+  g_clear_pointer(&self->title,           g_free);
+  g_clear_pointer(&self->cwd,             g_free);
+  g_clear_pointer(&self->font_desc,       pango_font_description_free);
+  g_clear_pointer(&self->search_needle,   g_free);
+  g_clear_pointer(&self->search_offsets,  g_array_unref);
 
   if (self->key_encoder != NULL)
     ghostty_key_encoder_free(self->key_encoder);
@@ -1135,16 +1527,20 @@ ptyxis_ghostty_widget_update_colors(PtyxisGhosttyWidget    *self,
                                     const PtyxisPaletteFace *face)
 {
   GhosttyColorRgb palette[256];
+  GhosttyColorRgb fg;
+  GhosttyColorRgb bg;
+  GhosttyColorRgb cursor;
+  int i;
 
   g_return_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self));
   g_return_if_fail(face != NULL);
 
   /* ANSI colors 0-15 from palette face */
-  for (int i = 0; i < 16; i++)
+  for (i = 0; i < 16; i++)
     palette[i] = rgba_to_color_rgb(face->indexed[i]);
 
   /* xterm 216-color cube: indices 16-231 */
-  for (int i = 0; i < 216; i++)
+  for (i = 0; i < 216; i++)
     {
       int r = i / 36;
       int g = (i % 36) / 6;
@@ -1157,22 +1553,88 @@ ptyxis_ghostty_widget_update_colors(PtyxisGhosttyWidget    *self,
     }
 
   /* Grayscale ramp: indices 232-255 */
-  for (int i = 0; i < 24; i++)
+  for (i = 0; i < 24; i++)
     {
       uint8_t v = (uint8_t)(8 + i * 10);
       palette[232 + i] = (GhosttyColorRgb){ .r = v, .g = v, .b = v };
     }
 
-  GhosttyColorRgb fg     = rgba_to_color_rgb(face->foreground);
-  GhosttyColorRgb bg     = rgba_to_color_rgb(face->background);
-  GhosttyColorRgb cursor = rgba_to_color_rgb(face->cursor_bg);
+  fg     = rgba_to_color_rgb(face->foreground);
+  bg     = rgba_to_color_rgb(face->background);
+  cursor = rgba_to_color_rgb(face->cursor_bg);
 
   ghostty_terminal_set(self->terminal, GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, &fg);
   ghostty_terminal_set(self->terminal, GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, &bg);
   ghostty_terminal_set(self->terminal, GHOSTTY_TERMINAL_OPT_COLOR_CURSOR, &cursor);
   ghostty_terminal_set(self->terminal, GHOSTTY_TERMINAL_OPT_COLOR_PALETTE, palette);
 
+  /* Sync render state colors */
+  ghostty_render_state_update(self->render_state, self->terminal);
+
   gtk_widget_queue_draw(GTK_WIDGET(self));
+}
+
+void
+ptyxis_ghostty_widget_set_font_desc(PtyxisGhosttyWidget    *self,
+                                    const PangoFontDescription *font_desc)
+{
+  g_return_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self));
+
+  if (font_desc != NULL)
+    {
+      int width;
+      int height;
+
+      g_clear_pointer(&self->font_desc, pango_font_description_free);
+      self->font_desc = pango_font_description_copy(font_desc);
+      update_cell_metrics(self);
+
+      width = gtk_widget_get_width(GTK_WIDGET(self));
+      height = gtk_widget_get_height(GTK_WIDGET(self));
+      if (self->terminal != NULL && width > 0 && height > 0)
+        resize_terminal(self, width, height);
+
+      gtk_widget_queue_resize(GTK_WIDGET(self));
+    }
+}
+
+void
+ptyxis_ghostty_widget_set_cursor_shape(PtyxisGhosttyWidget *self,
+                                       PtyxisCursorShape    shape)
+{
+  g_return_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self));
+
+  if (self->cursor_shape != shape)
+    {
+      self->cursor_shape = shape;
+      gtk_widget_queue_draw(GTK_WIDGET(self));
+    }
+}
+
+void
+ptyxis_ghostty_widget_set_cursor_blink_mode(PtyxisGhosttyWidget *self,
+                                            PtyxisCursorBlinkMode mode)
+{
+  g_return_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self));
+
+  if (self->cursor_blink_mode != mode)
+    {
+      self->cursor_blink_mode = mode;
+      update_blink_timer(self);
+    }
+}
+
+void
+ptyxis_ghostty_widget_set_text_blink_mode(PtyxisGhosttyWidget *self,
+                                          PtyxisTextBlinkMode  mode)
+{
+  g_return_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self));
+
+  if (self->text_blink_mode != mode)
+    {
+      self->text_blink_mode = mode;
+      update_blink_timer(self);
+    }
 }
 
 void
@@ -1238,6 +1700,13 @@ ptyxis_ghostty_widget_new(void)
   return g_object_new(PTYXIS_TYPE_GHOSTTY_WIDGET, NULL);
 }
 
+GhosttyTerminal
+ptyxis_ghostty_widget_get_terminal(PtyxisGhosttyWidget *self)
+{
+  g_return_val_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self), NULL);
+  return self->terminal;
+}
+
 void
 ptyxis_ghostty_widget_get_size(PtyxisGhosttyWidget *self,
                                 PtyxisGhosttySize   *size)
@@ -1267,8 +1736,25 @@ ptyxis_ghostty_widget_has_selection(PtyxisGhosttyWidget *self)
 char *
 ptyxis_ghostty_widget_get_selected_text(PtyxisGhosttyWidget *self)
 {
+  GhosttyTerminalSelectionFormatOptions opts = GHOSTTY_INIT_SIZED(GhosttyTerminalSelectionFormatOptions);
+  uint8_t *ptr = NULL;
+  size_t len = 0;
+  GhosttyResult res;
+
   g_return_val_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self), NULL);
-  /* TODO: implement via ghostty_terminal formatter */
+
+  opts.emit = GHOSTTY_FORMATTER_FORMAT_PLAIN;
+  opts.unwrap = true;
+  opts.trim = true;
+  opts.selection = NULL;
+
+  res = ghostty_terminal_selection_format_alloc(self->terminal, NULL, opts, &ptr, &len);
+  if (res == GHOSTTY_SUCCESS && ptr != NULL)
+    {
+      char *str = g_strndup((const char *)ptr, len);
+      ghostty_free(NULL, ptr, len);
+      return str;
+    }
   return NULL;
 }
 
@@ -1283,11 +1769,15 @@ void
 ptyxis_ghostty_widget_paste(PtyxisGhosttyWidget *self,
                              const char          *text)
 {
+  ssize_t res;
   g_return_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self));
   g_return_if_fail(text != NULL);
 
   if (self->pty_fd >= 0)
-    write(self->pty_fd, text, strlen(text));
+    {
+      res = write(self->pty_fd, text, strlen(text));
+      (void)res;
+    }
 }
 
 void
@@ -1325,9 +1815,10 @@ void
 ptyxis_ghostty_widget_get_background_rgba(PtyxisGhosttyWidget *self,
                                            GdkRGBA             *out_color)
 {
+  GhosttyRenderStateColors colors;
   g_return_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self));
   g_return_if_fail(out_color != NULL);
-  GhosttyRenderStateColors colors = GHOSTTY_INIT_SIZED(GhosttyRenderStateColors);
+  colors = GHOSTTY_INIT_SIZED(GhosttyRenderStateColors);
   ghostty_render_state_colors_get(self->render_state, &colors);
   *out_color = color_rgb_to_rgba(colors.background);
 }
@@ -1337,40 +1828,93 @@ ptyxis_ghostty_widget_set_input_enabled(PtyxisGhosttyWidget *self,
                                          gboolean             enabled)
 {
   g_return_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self));
-  /* TODO: block key/mouse event delivery when !enabled */
-  (void)enabled;
+  self->input_enabled = enabled;
 }
 
 gboolean
 ptyxis_ghostty_widget_get_input_enabled(PtyxisGhosttyWidget *self)
 {
   g_return_val_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self), TRUE);
-  return TRUE;
+  return self->input_enabled;
 }
 
 void
 ptyxis_ghostty_widget_search_start(PtyxisGhosttyWidget *self,
                                     const char          *needle)
 {
-  (void)needle;
   g_return_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self));
-  /* TODO: implement search via formatter + text scan */
+
+  if (needle == NULL || needle[0] == '\0')
+    {
+      search_invalidate(self);
+      return;
+    }
+
+  g_free(self->search_needle);
+  self->search_needle = g_strdup(needle);
+
+  /* Invalidate cached offsets when needle changes */
+  g_clear_pointer(&self->search_offsets, g_array_unref);
+  self->search_current = -1;
+  self->search_col_len = 0;
+
+  /* Try to find the first match */
+  ptyxis_ghostty_widget_search_next(self);
 }
 
 void
 ptyxis_ghostty_widget_search_next(PtyxisGhosttyWidget *self)
 {
   g_return_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self));
+
+  if (self->search_needle == NULL || self->search_needle[0] == '\0')
+    return;
+
+  /* Advance to next match */
+  if (self->search_offsets != NULL)
+    {
+      self->search_current++;
+      if ((guint)self->search_current >= self->search_offsets->len)
+        {
+          if (self->search_wrap)
+            self->search_current = 0;
+          else
+            self->search_current = -1;
+        }
+    }
+  else
+    self->search_current = 0;
+
+  search_install_match(self);
 }
 
 void
 ptyxis_ghostty_widget_search_previous(PtyxisGhosttyWidget *self)
 {
   g_return_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self));
+
+  if (self->search_needle == NULL || self->search_needle[0] == '\0')
+    return;
+
+  /* Go to previous match */
+  if (self->search_offsets != NULL)
+    {
+      self->search_current--;
+      if (self->search_current < 0)
+        {
+          if (self->search_wrap && self->search_offsets->len > 0)
+            self->search_current = (int)self->search_offsets->len - 1;
+          else
+            self->search_current = -1;
+        }
+    }
+
+  search_install_match(self);
 }
 
 void
 ptyxis_ghostty_widget_search_end(PtyxisGhosttyWidget *self)
 {
   g_return_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self));
+  search_invalidate(self);
 }

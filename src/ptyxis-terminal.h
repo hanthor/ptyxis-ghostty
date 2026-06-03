@@ -59,4 +59,18 @@ gboolean        ptyxis_terminal_get_input_enabled   (PtyxisTerminal *self);
 void            ptyxis_terminal_set_pty             (PtyxisTerminal *self, VtePty *pty);
 VtePty         *ptyxis_terminal_get_pty             (PtyxisTerminal *self);
 
+void            ptyxis_terminal_set_font_desc       (PtyxisTerminal *self, const PangoFontDescription *font_desc);
+const PangoFontDescription *ptyxis_terminal_get_font_desc(PtyxisTerminal *self);
+void            ptyxis_terminal_set_cursor_shape    (PtyxisTerminal *self, int shape);
+int             ptyxis_terminal_get_cursor_shape    (PtyxisTerminal *self);
+void            ptyxis_terminal_set_cursor_blink_mode(PtyxisTerminal *self, int mode);
+int             ptyxis_terminal_get_cursor_blink_mode(PtyxisTerminal *self);
+void            ptyxis_terminal_set_text_blink_mode (PtyxisTerminal *self, int mode);
+int             ptyxis_terminal_get_text_blink_mode (PtyxisTerminal *self);
+
+void            ptyxis_terminal_search_find_next    (PtyxisTerminal *self);
+void            ptyxis_terminal_search_find_previous(PtyxisTerminal *self);
+void            ptyxis_terminal_search_set_regex    (PtyxisTerminal *self, const char *regex, guint flags);
+void            ptyxis_terminal_search_set_wrap_around(PtyxisTerminal *self, gboolean wrap);
+
 G_END_DECLS

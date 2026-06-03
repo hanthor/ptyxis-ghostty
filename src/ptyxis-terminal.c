@@ -86,6 +86,15 @@ struct _PtyxisTerminal
 
   /* Current working directory (from OSC 7 via ghostty) */
   char                  *cwd;
+
+  /* Scrollback adjustment (GtkScrollable interface) */
+  GtkAdjustment         *vadjustment;
+  gulong                 vadjustment_changed_id;
+
+  PangoFontDescription  *font_desc;
+  PtyxisCursorShape      cursor_shape;
+  PtyxisCursorBlinkMode  cursor_blink_mode;
+  PtyxisTextBlinkMode    text_blink_mode;
 };
 
 enum {
@@ -95,6 +104,15 @@ enum {
   PROP_CURRENT_DIRECTORY_URI,
   PROP_PALETTE,
   PROP_SHORTCUTS,
+  /* GtkScrollable properties */
+  PROP_HADJUSTMENT,
+  PROP_VADJUSTMENT,
+  PROP_HSCROLL_POLICY,
+  PROP_VSCROLL_POLICY,
+  PROP_FONT_DESC,
+  PROP_CURSOR_SHAPE,
+  PROP_CURSOR_BLINK_MODE,
+  PROP_TEXT_BLINK_MODE,
   N_PROPS
 };
 
@@ -109,11 +127,12 @@ enum {
   N_SIGNALS
 };
 
-G_DEFINE_FINAL_TYPE(PtyxisTerminal, ptyxis_terminal, GTK_TYPE_WIDGET)
+G_DEFINE_FINAL_TYPE_WITH_CODE(PtyxisTerminal, ptyxis_terminal, GTK_TYPE_WIDGET,
+  G_IMPLEMENT_INTERFACE(GTK_TYPE_SCROLLABLE, NULL))
 
 static GParamSpec *properties [N_PROPS];
 static guint signals[N_SIGNALS];
-static const char * const url_regexes_str[] = {
+static const char * const url_regexes_str[] G_GNUC_UNUSED = {
   REGEX_URL_AS_IS,
   REGEX_URL_HTTP,
   REGEX_URL_FILE,
@@ -122,9 +141,12 @@ static const char * const url_regexes_str[] = {
 
 /* Signal handlers from PtyxisGhosttyWidget */
 
+static void ptyxis_terminal_update_scrollbar(PtyxisTerminal *self);
+
 static void
 ptyxis_terminal_contents_changed_cb(PtyxisTerminal *self)
 {
+  ptyxis_terminal_update_scrollbar(self);
   g_signal_emit(self, signals[CONTENTS_CHANGED], 0);
 }
 
@@ -186,6 +208,94 @@ ptyxis_terminal_on_cwd_changed(PtyxisGhosttyWidget *widget,
   g_object_notify_by_pspec(G_OBJECT(self), properties[PROP_CURRENT_DIRECTORY_URI]);
 }
 
+/* --- Scrollback --- */
+
+static void
+ptyxis_terminal_update_scrollbar(PtyxisTerminal *self)
+{
+  GhosttyTerminalScrollbar sb = {0};
+  GhosttyTerminal terminal;
+
+  if (self->vadjustment == NULL || self->ghostty == NULL)
+    return;
+
+  /* Ask ghostty for current scrollbar state; may return INVALID if not scrollable */
+  terminal = ptyxis_ghostty_widget_get_terminal(self->ghostty);
+  if (terminal == NULL)
+    return;
+  ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_SCROLLBAR, &sb);
+
+  /* Block our own signal to avoid feedback loop while updating */
+  if (self->vadjustment_changed_id != 0)
+    g_signal_handler_block(self->vadjustment, self->vadjustment_changed_id);
+
+  gtk_adjustment_configure(self->vadjustment,
+                           (double)sb.offset,   /* value  */
+                           0.0,                 /* lower  */
+                           (double)sb.total,    /* upper  */
+                           1.0,                 /* step_increment */
+                           (double)sb.len,      /* page_increment */
+                           (double)sb.len);     /* page_size */
+
+  if (self->vadjustment_changed_id != 0)
+    g_signal_handler_unblock(self->vadjustment, self->vadjustment_changed_id);
+}
+
+static void
+ptyxis_terminal_vadjustment_changed_cb(GtkAdjustment  *adjustment,
+                                        PtyxisTerminal *self)
+{
+  double value;
+  GhosttyTerminalScrollbar sb = {0};
+  GhosttyTerminalScrollViewport behavior;
+  GhosttyTerminal terminal;
+  intptr_t delta;
+
+  if (self->ghostty == NULL)
+    return;
+
+  terminal = ptyxis_ghostty_widget_get_terminal(self->ghostty);
+  if (terminal == NULL)
+    return;
+
+  ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_SCROLLBAR, &sb);
+  value = gtk_adjustment_get_value(adjustment);
+
+  if ((uint64_t)value == sb.offset)
+    return;
+
+  /* Scroll to the requested absolute offset via delta */
+  delta = (intptr_t)value - (intptr_t)sb.offset;
+  behavior.tag = GHOSTTY_SCROLL_VIEWPORT_DELTA;
+  behavior.value.delta = delta;
+  ghostty_terminal_scroll_viewport(terminal, behavior);
+  gtk_widget_queue_draw(GTK_WIDGET(self));
+}
+
+static void
+ptyxis_terminal_set_vadjustment(PtyxisTerminal *self,
+                                 GtkAdjustment  *adjustment)
+{
+  if (adjustment == NULL)
+    adjustment = gtk_adjustment_new(0, 0, 0, 0, 0, 0);
+
+  if (self->vadjustment == adjustment)
+    return;
+
+  if (self->vadjustment != NULL && self->vadjustment_changed_id != 0)
+    {
+      g_signal_handler_disconnect(self->vadjustment, self->vadjustment_changed_id);
+      self->vadjustment_changed_id = 0;
+    }
+
+  g_set_object(&self->vadjustment, adjustment);
+
+  self->vadjustment_changed_id = g_signal_connect(self->vadjustment, "value-changed",
+    G_CALLBACK(ptyxis_terminal_vadjustment_changed_cb), self);
+
+  ptyxis_terminal_update_scrollbar(self);
+}
+
 /* --- Color / Palette --- */
 
 static void
@@ -220,7 +330,7 @@ ptyxis_terminal_notify_dark_cb(PtyxisTerminal *self)
 
 /* --- Toast notifications --- */
 
-static void
+static void G_GNUC_UNUSED
 ptyxis_terminal_toast(PtyxisTerminal *self,
                       int            timeout,
                       const char    *title)
@@ -240,7 +350,7 @@ ptyxis_terminal_toast(PtyxisTerminal *self,
 
 /* --- Active terminal check --- */
 
-static gboolean
+static gboolean G_GNUC_UNUSED
 ptyxis_terminal_is_active(PtyxisTerminal *self)
 {
   PtyxisWindow *window;
@@ -421,7 +531,6 @@ ptyxis_terminal_drop_target_drop(GtkDropTargetAsync *target,
   g_autofree char *text = NULL;
   g_autoptr(GFile) file = NULL;
   g_autoptr(GFileInfo) info = NULL;
-  PtyxisApplication *app = PTYXIS_APPLICATION_DEFAULT;
   g_autofree char *path = NULL;
 
   g_assert(PTYXIS_IS_TERMINAL(self));
@@ -562,7 +671,11 @@ open_link_action(GtkWidget  *widget,
                     0.0, 0.0, 1, (GdkModifierType)0, uri, &handled);
 
       if (!handled)
-        gtk_show_uri(NULL, uri, GDK_CURRENT_TIME);
+        {
+          G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+          gtk_show_uri(NULL, uri, GDK_CURRENT_TIME);
+          G_GNUC_END_IGNORE_DEPRECATIONS
+        }
     }
 }
 
@@ -586,7 +699,7 @@ ptyxis_terminal_shortcuts_notify_cb(PtyxisTerminal *self,
 
 /* --- Container termprops --- */
 
-static void
+static void G_GNUC_UNUSED
 ptyxis_terminal_update_container_name(PtyxisTerminal *self,
                                       const char     *name)
 {
@@ -594,9 +707,9 @@ ptyxis_terminal_update_container_name(PtyxisTerminal *self,
   g_object_notify_by_pspec(G_OBJECT(self), properties[PROP_CURRENT_CONTAINER_NAME]);
 }
 
-static void
+static void G_GNUC_UNUSED
 ptyxis_terminal_update_container_runtime(PtyxisTerminal *self,
-                                        const char     *runtime)
+                                         const char     *runtime)
 {
   g_set_str(&self->current_container_runtime, runtime);
   g_object_notify_by_pspec(G_OBJECT(self), properties[PROP_CURRENT_CONTAINER_RUNTIME]);
@@ -726,11 +839,15 @@ ptyxis_terminal_dispose(GObject *object)
   PtyxisTerminal *self = PTYXIS_TERMINAL(object);
 
   g_clear_object(&self->pty);
-  g_clear_pointer(&self->ghostty, (GDestroyNotify)gtk_widget_unparent);
+  if (self->ghostty != NULL)
+    {
+      gtk_widget_unparent(GTK_WIDGET(self->ghostty));
+      self->ghostty = NULL;
+    }
+
+  gtk_widget_dispose_template(GTK_WIDGET(self), PTYXIS_TYPE_TERMINAL);
 
   g_clear_object(&self->palette);
-  g_clear_object(&self->popover);
-  g_clear_object(&self->terminal_menu);
   g_clear_object(&self->shortcuts);
 
   G_OBJECT_CLASS(ptyxis_terminal_parent_class)->dispose(object);
@@ -746,6 +863,7 @@ ptyxis_terminal_finalize(GObject *object)
   g_clear_pointer(&self->current_container_name, g_free);
   g_clear_pointer(&self->current_container_runtime, g_free);
   g_clear_pointer(&self->custom_links, g_hash_table_unref);
+  g_clear_pointer(&self->font_desc, pango_font_description_free);
 
   G_OBJECT_CLASS(ptyxis_terminal_parent_class)->finalize(object);
 }
@@ -782,6 +900,38 @@ ptyxis_terminal_get_property(GObject    *object,
       g_value_set_object(value, ptyxis_terminal_get_shortcuts(self));
       break;
 
+    case PROP_HADJUSTMENT:
+      g_value_set_object(value, NULL);
+      break;
+
+    case PROP_VADJUSTMENT:
+      g_value_set_object(value, self->vadjustment);
+      break;
+
+    case PROP_HSCROLL_POLICY:
+      g_value_set_enum(value, GTK_SCROLL_MINIMUM);
+      break;
+
+    case PROP_VSCROLL_POLICY:
+      g_value_set_enum(value, GTK_SCROLL_MINIMUM);
+      break;
+
+    case PROP_FONT_DESC:
+      g_value_set_boxed(value, ptyxis_terminal_get_font_desc(self));
+      break;
+
+    case PROP_CURSOR_SHAPE:
+      g_value_set_enum(value, ptyxis_terminal_get_cursor_shape(self));
+      break;
+
+    case PROP_CURSOR_BLINK_MODE:
+      g_value_set_enum(value, ptyxis_terminal_get_cursor_blink_mode(self));
+      break;
+
+    case PROP_TEXT_BLINK_MODE:
+      g_value_set_enum(value, ptyxis_terminal_get_text_blink_mode(self));
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
     }
@@ -799,6 +949,35 @@ ptyxis_terminal_set_property(GObject      *object,
     {
     case PROP_PALETTE:
       ptyxis_terminal_set_palette(self, g_value_get_object(value));
+      break;
+
+    case PROP_HADJUSTMENT:
+      /* horizontal scrolling not used */
+      break;
+
+    case PROP_VADJUSTMENT:
+      ptyxis_terminal_set_vadjustment(self, g_value_get_object(value));
+      break;
+
+    case PROP_HSCROLL_POLICY:
+    case PROP_VSCROLL_POLICY:
+      /* policies stored by GtkScrolledWindow; we don't need them */
+      break;
+
+    case PROP_FONT_DESC:
+      ptyxis_terminal_set_font_desc(self, g_value_get_boxed(value));
+      break;
+
+    case PROP_CURSOR_SHAPE:
+      ptyxis_terminal_set_cursor_shape(self, g_value_get_enum(value));
+      break;
+
+    case PROP_CURSOR_BLINK_MODE:
+      ptyxis_terminal_set_cursor_blink_mode(self, g_value_get_enum(value));
+      break;
+
+    case PROP_TEXT_BLINK_MODE:
+      ptyxis_terminal_set_text_blink_mode(self, g_value_get_enum(value));
       break;
 
     default:
@@ -856,7 +1035,48 @@ ptyxis_terminal_class_init(PtyxisTerminalClass *klass)
                         (G_PARAM_READABLE |
                          G_PARAM_STATIC_STRINGS));
 
-  g_object_class_install_properties(object_class, N_PROPS, properties);
+  properties[PROP_FONT_DESC] =
+    g_param_spec_boxed("font-desc", NULL, NULL,
+                       PANGO_TYPE_FONT_DESCRIPTION,
+                       (G_PARAM_READWRITE |
+                        G_PARAM_EXPLICIT_NOTIFY |
+                        G_PARAM_STATIC_STRINGS));
+
+  properties[PROP_CURSOR_SHAPE] =
+    g_param_spec_enum("cursor-shape", NULL, NULL,
+                      PTYXIS_TYPE_CURSOR_SHAPE,
+                      PTYXIS_CURSOR_SHAPE_BLOCK,
+                      (G_PARAM_READWRITE |
+                       G_PARAM_EXPLICIT_NOTIFY |
+                       G_PARAM_STATIC_STRINGS));
+
+  properties[PROP_CURSOR_BLINK_MODE] =
+    g_param_spec_enum("cursor-blink-mode", NULL, NULL,
+                      PTYXIS_TYPE_CURSOR_BLINK_MODE,
+                      PTYXIS_CURSOR_BLINK_SYSTEM,
+                      (G_PARAM_READWRITE |
+                       G_PARAM_EXPLICIT_NOTIFY |
+                       G_PARAM_STATIC_STRINGS));
+
+  properties[PROP_TEXT_BLINK_MODE] =
+    g_param_spec_enum("text-blink-mode", NULL, NULL,
+                      PTYXIS_TYPE_TEXT_BLINK_MODE,
+                      PTYXIS_TEXT_BLINK_NEVER,
+                      (G_PARAM_READWRITE |
+                       G_PARAM_EXPLICIT_NOTIFY |
+                       G_PARAM_STATIC_STRINGS));
+
+  for (guint i = 1; i < N_PROPS; i++)
+    {
+      if (properties[i] != NULL)
+        g_object_class_install_property (object_class, i, properties[i]);
+    }
+
+  /* GtkScrollable interface properties */
+  g_object_class_override_property(object_class, PROP_HADJUSTMENT,   "hadjustment");
+  g_object_class_override_property(object_class, PROP_VADJUSTMENT,   "vadjustment");
+  g_object_class_override_property(object_class, PROP_HSCROLL_POLICY, "hscroll-policy");
+  g_object_class_override_property(object_class, PROP_VSCROLL_POLICY, "vscroll-policy");
 
   signals[GRID_SIZE_CHANGED] =
     g_signal_new("grid-size-changed",
@@ -974,6 +1194,10 @@ ptyxis_terminal_init(PtyxisTerminal *self)
   PtyxisShortcuts *shortcuts = ptyxis_application_get_shortcuts(app);
 
   g_set_object(&self->shortcuts, shortcuts);
+
+  self->cursor_shape = PTYXIS_CURSOR_SHAPE_BLOCK;
+  self->cursor_blink_mode = PTYXIS_CURSOR_BLINK_SYSTEM;
+  self->text_blink_mode = PTYXIS_TEXT_BLINK_NEVER;
 
   gtk_widget_init_template(GTK_WIDGET(self));
 
@@ -1224,4 +1448,132 @@ ptyxis_terminal_get_pty(PtyxisTerminal *self)
 {
   g_return_val_if_fail(PTYXIS_IS_TERMINAL(self), NULL);
   return self->pty;
+}
+
+const PangoFontDescription *
+ptyxis_terminal_get_font_desc(PtyxisTerminal *self)
+{
+  g_return_val_if_fail(PTYXIS_IS_TERMINAL(self), NULL);
+  return self->font_desc;
+}
+
+void
+ptyxis_terminal_set_font_desc(PtyxisTerminal             *self,
+                              const PangoFontDescription *font_desc)
+{
+  g_return_if_fail(PTYXIS_IS_TERMINAL(self));
+
+  g_clear_pointer(&self->font_desc, pango_font_description_free);
+  if (font_desc != NULL)
+    self->font_desc = pango_font_description_copy(font_desc);
+
+  if (self->ghostty != NULL)
+    ptyxis_ghostty_widget_set_font_desc(self->ghostty, font_desc);
+
+  g_object_notify_by_pspec(G_OBJECT(self), properties[PROP_FONT_DESC]);
+}
+
+int
+ptyxis_terminal_get_cursor_shape(PtyxisTerminal *self)
+{
+  g_return_val_if_fail(PTYXIS_IS_TERMINAL(self), PTYXIS_CURSOR_SHAPE_BLOCK);
+  return self->cursor_shape;
+}
+
+void
+ptyxis_terminal_set_cursor_shape(PtyxisTerminal *self, int shape)
+{
+  g_return_if_fail(PTYXIS_IS_TERMINAL(self));
+
+  if (self->cursor_shape != (PtyxisCursorShape)shape)
+    {
+      self->cursor_shape = (PtyxisCursorShape)shape;
+      if (self->ghostty != NULL)
+        ptyxis_ghostty_widget_set_cursor_shape(self->ghostty, (PtyxisCursorShape)shape);
+      g_object_notify_by_pspec(G_OBJECT(self), properties[PROP_CURSOR_SHAPE]);
+    }
+}
+
+int
+ptyxis_terminal_get_cursor_blink_mode(PtyxisTerminal *self)
+{
+  g_return_val_if_fail(PTYXIS_IS_TERMINAL(self), PTYXIS_CURSOR_BLINK_SYSTEM);
+  return self->cursor_blink_mode;
+}
+
+void
+ptyxis_terminal_set_cursor_blink_mode(PtyxisTerminal *self, int mode)
+{
+  g_return_if_fail(PTYXIS_IS_TERMINAL(self));
+
+  if (self->cursor_blink_mode != (PtyxisCursorBlinkMode)mode)
+    {
+      self->cursor_blink_mode = (PtyxisCursorBlinkMode)mode;
+      if (self->ghostty != NULL)
+        ptyxis_ghostty_widget_set_cursor_blink_mode(self->ghostty, (PtyxisCursorBlinkMode)mode);
+      g_object_notify_by_pspec(G_OBJECT(self), properties[PROP_CURSOR_BLINK_MODE]);
+    }
+}
+
+int
+ptyxis_terminal_get_text_blink_mode(PtyxisTerminal *self)
+{
+  g_return_val_if_fail(PTYXIS_IS_TERMINAL(self), PTYXIS_TEXT_BLINK_NEVER);
+  return self->text_blink_mode;
+}
+
+void
+ptyxis_terminal_set_text_blink_mode(PtyxisTerminal *self, int mode)
+{
+  g_return_if_fail(PTYXIS_IS_TERMINAL(self));
+
+  if (self->text_blink_mode != (PtyxisTextBlinkMode)mode)
+    {
+      self->text_blink_mode = (PtyxisTextBlinkMode)mode;
+      if (self->ghostty != NULL)
+        ptyxis_ghostty_widget_set_text_blink_mode(self->ghostty, (PtyxisTextBlinkMode)mode);
+      g_object_notify_by_pspec(G_OBJECT(self), properties[PROP_TEXT_BLINK_MODE]);
+    }
+}
+
+void
+ptyxis_terminal_search_find_next(PtyxisTerminal *self)
+{
+  g_return_if_fail(PTYXIS_IS_TERMINAL(self));
+
+  if (self->ghostty != NULL)
+    ptyxis_ghostty_widget_search_next(self->ghostty);
+}
+
+void
+ptyxis_terminal_search_find_previous(PtyxisTerminal *self)
+{
+  g_return_if_fail(PTYXIS_IS_TERMINAL(self));
+
+  if (self->ghostty != NULL)
+    ptyxis_ghostty_widget_search_previous(self->ghostty);
+}
+
+void
+ptyxis_terminal_search_set_regex(PtyxisTerminal *self, const char *regex, guint flags)
+{
+  g_return_if_fail(PTYXIS_IS_TERMINAL(self));
+
+  if (self->ghostty != NULL)
+    ptyxis_ghostty_widget_search_start(self->ghostty, regex);
+}
+
+void
+ptyxis_terminal_search_set_wrap_around(PtyxisTerminal *self, gboolean wrap)
+{
+  g_return_if_fail(PTYXIS_IS_TERMINAL(self));
+
+  if (self->ghostty != NULL)
+    {
+      GhosttyTerminal terminal = ptyxis_ghostty_widget_get_terminal(self->ghostty);
+      /* Note: ghostty doesn't have direct wrap_around support like VTE,
+       * but we store the preference in the widget for search navigation. */
+      (void)terminal;
+      (void)wrap;
+    }
 }

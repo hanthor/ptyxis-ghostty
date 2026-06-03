@@ -91,7 +91,7 @@ ptyxis_window_dressing_update (PtyxisWindowDressing *self)
        *
        * See #241 for details
        */
-      g_string_append (string, "vte-terminal { background: none; }\n");
+      g_string_append (string, "terminal { background: none; }\n");
 
       bg = gdk_rgba_to_string (&face->background);
       fg = gdk_rgba_to_string (&face->foreground);
@@ -125,7 +125,7 @@ ptyxis_window_dressing_update (PtyxisWindowDressing *self)
                               "window.%s .window-contents popover > arrow { background-color: alpha(%s, %s); }\n",
                               self->css_class, titlebar_bg, popover_alpha_str);
       g_string_append_printf (string,
-                              "window.%s .window-contents vte-terminal > revealer.size label { color: %s; background-color: %s; }\n",
+                              "window.%s .window-contents terminal > revealer.size label { color: %s; background-color: %s; }\n",
                               self->css_class, titlebar_fg, revealer_bg);
       /* It would be super if we could make these match the color of the
        * actual tab contents rather than the active tab profile.

@@ -48,6 +48,132 @@ test_widget_size_struct_defaults(void)
   g_assert_cmpuint(size.cell_height, ==, 0);
 }
 
+static void
+test_widget_lifecycle(void)
+{
+  GtkWidget *widget;
+  PtyxisGhosttySize size = {0};
+
+  if (!gtk_init_check())
+    {
+      g_test_skip("No display/GTK backend available; skipping widget lifecycle test");
+      return;
+    }
+
+  widget = g_object_new(PTYXIS_TYPE_GHOSTTY_WIDGET, NULL);
+  g_assert_nonnull(widget);
+  g_assert_true(PTYXIS_IS_GHOSTTY_WIDGET(widget));
+
+  ptyxis_ghostty_widget_get_size(PTYXIS_GHOSTTY_WIDGET(widget), &size);
+  g_assert_cmpuint(size.columns, >, 0);
+  g_assert_cmpuint(size.rows, >, 0);
+
+  g_object_ref_sink(widget);
+  g_object_unref(widget);
+}
+
+static void
+test_widget_realized_lifecycle(void)
+{
+  GtkWidget *window;
+  GtkWidget *widget;
+
+  if (!gtk_init_check())
+    {
+      g_test_skip("No display/GTK backend available; skipping realized lifecycle test");
+      return;
+    }
+
+  window = gtk_window_new();
+  g_assert_nonnull(window);
+
+  widget = g_object_new(PTYXIS_TYPE_GHOSTTY_WIDGET, NULL);
+  g_assert_nonnull(widget);
+
+  gtk_window_set_child(GTK_WINDOW(window), widget);
+  g_assert_true(gtk_widget_get_parent(widget) == window);
+
+  gtk_widget_realize(window);
+  gtk_widget_realize(widget);
+  g_assert_true(gtk_widget_get_realized(widget));
+
+  gtk_window_destroy(GTK_WINDOW(window));
+}
+
+static void
+test_widget_input_enabled(void)
+{
+  GtkWidget *widget;
+
+  if (!gtk_init_check())
+    {
+      g_test_skip("No display/GTK backend available; skipping input enabled test");
+      return;
+    }
+
+  widget = g_object_new(PTYXIS_TYPE_GHOSTTY_WIDGET, NULL);
+  g_assert_true(ptyxis_ghostty_widget_get_input_enabled(PTYXIS_GHOSTTY_WIDGET(widget)));
+
+  ptyxis_ghostty_widget_set_input_enabled(PTYXIS_GHOSTTY_WIDGET(widget), FALSE);
+  g_assert_false(ptyxis_ghostty_widget_get_input_enabled(PTYXIS_GHOSTTY_WIDGET(widget)));
+
+  ptyxis_ghostty_widget_set_input_enabled(PTYXIS_GHOSTTY_WIDGET(widget), TRUE);
+  g_assert_true(ptyxis_ghostty_widget_get_input_enabled(PTYXIS_GHOSTTY_WIDGET(widget)));
+
+  g_object_ref_sink(widget);
+  g_object_unref(widget);
+}
+
+static void
+test_widget_selection_api_defaults(void)
+{
+  GtkWidget *widget;
+  char *text;
+
+  if (!gtk_init_check())
+    {
+      g_test_skip("No display/GTK backend available; skipping selection defaults test");
+      return;
+    }
+
+  widget = g_object_new(PTYXIS_TYPE_GHOSTTY_WIDGET, NULL);
+
+  g_assert_false(ptyxis_ghostty_widget_has_selection(PTYXIS_GHOSTTY_WIDGET(widget)));
+  text = ptyxis_ghostty_widget_get_selected_text(PTYXIS_GHOSTTY_WIDGET(widget));
+  g_assert_null(text);
+
+  g_object_ref_sink(widget);
+  g_object_unref(widget);
+}
+
+static void
+test_widget_paste_api(void)
+{
+  GtkWidget *widget;
+  GtkWidget *window;
+
+  if (!gtk_init_check())
+    {
+      g_test_skip("No display/GTK backend available; skipping paste API test");
+      return;
+    }
+
+  widget = g_object_new(PTYXIS_TYPE_GHOSTTY_WIDGET, NULL);
+
+  /* Paste on unrealized widget (should not crash) */
+  ptyxis_ghostty_widget_paste(PTYXIS_GHOSTTY_WIDGET(widget), "test unrealized");
+
+  /* Paste on realized widget */
+  window = gtk_window_new();
+  gtk_window_set_child(GTK_WINDOW(window), widget);
+  gtk_widget_realize(window);
+  gtk_widget_realize(widget);
+
+  ptyxis_ghostty_widget_paste(PTYXIS_GHOSTTY_WIDGET(widget), "test realized");
+
+  gtk_window_destroy(GTK_WINDOW(window));
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -61,6 +187,16 @@ main(int argc, char *argv[])
                   test_public_api_exists);
   g_test_add_func("/Ptyxis/GhosttyWidget/size_defaults",
                   test_widget_size_struct_defaults);
+  g_test_add_func("/Ptyxis/GhosttyWidget/lifecycle",
+                  test_widget_lifecycle);
+  g_test_add_func("/Ptyxis/GhosttyWidget/realized_lifecycle",
+                  test_widget_realized_lifecycle);
+  g_test_add_func("/Ptyxis/GhosttyWidget/input_enabled",
+                  test_widget_input_enabled);
+  g_test_add_func("/Ptyxis/GhosttyWidget/selection_defaults",
+                  test_widget_selection_api_defaults);
+  g_test_add_func("/Ptyxis/GhosttyWidget/paste_api",
+                  test_widget_paste_api);
 
   return g_test_run();
 }

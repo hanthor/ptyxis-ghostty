@@ -24,11 +24,19 @@
 
 G_BEGIN_DECLS
 
+#ifndef VTE_PCRE2_UCP
 #define VTE_PCRE2_UCP 0x00020000u
+#endif
+#ifndef VTE_PCRE2_MULTILINE
 #define VTE_PCRE2_MULTILINE 0x00000400u
+#endif
+#ifndef VTE_PCRE2_CASELESS
 #define VTE_PCRE2_CASELESS 0x00000008u
+#endif
 
+#ifndef VTE_VERSION_NUMERIC
 #define VTE_VERSION_NUMERIC ((vte_get_major_version()) * 10000 + (vte_get_minor_version()) * 100 + (vte_get_micro_version()))
+#endif
 
 #define _GDK_RGBA_DECODE(c) ((unsigned)(((c) >= 'A' && (c) <= 'F') ? ((c)-'A'+10) : \
                                         ((c) >= 'a' && (c) <= 'f') ? ((c)-'a'+10) : \

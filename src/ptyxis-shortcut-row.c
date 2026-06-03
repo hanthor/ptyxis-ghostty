@@ -211,7 +211,9 @@ ptyxis_shortcut_row_set_accelerator (PtyxisShortcutRow *self,
       if (accelerator && accelerator[0] && gtk_accelerator_parse (accelerator, &keyval, &state))
         disabled = FALSE;
 
+      G_GNUC_BEGIN_IGNORE_DEPRECATIONS
       adw_shortcut_label_set_accelerator (self->label, accelerator);
+      G_GNUC_END_IGNORE_DEPRECATIONS
 
       if (disabled)
         gtk_stack_set_visible_child_name (self->stack, "disabled");

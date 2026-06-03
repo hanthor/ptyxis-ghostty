@@ -76,7 +76,7 @@ foreach test, params: widget_tests
   extra = params.get('sources', [])
   test_exe = executable(test,
     ['@0@.c'.format(test), '../src/ptyxis-ghostty-widget.c'] + extra,
-                 c_args: testsuite_c_args + ['-DGHOSTTY_STATIC', '-DGHOSTTY_TEST_BUILD'],
+                 c_args: testsuite_c_args + ['-DGHOSTTY_STATIC', '-DGHOSTTY_TEST_BUILD', '-Wno-error=strict-prototypes'],
            dependencies: widget_test_deps,
           link_args: ptyxis_link_args,
     include_directories: [

@@ -85,8 +85,9 @@ ptyxis_find_bar_get_search (PtyxisFindBar *self,
   if (ptyxis_str_empty0 (text))
     return NULL;
 
+  /* Set flags for case sensitivity (PCRE2-compatible) */
   if (!gtk_check_button_get_active (GTK_CHECK_BUTTON (self->match_case)))
-    *flags |= VTE_PCRE2_CASELESS;
+    *flags |= 0x0080;  /* PCRE2_CASELESS */
 
   if (!gtk_check_button_get_active (GTK_CHECK_BUTTON (self->use_regex)))
     text = escaped = g_regex_escape_string (text, -1);
@@ -107,7 +108,7 @@ ptyxis_find_bar_next (GtkWidget  *widget,
   g_assert (PTYXIS_IS_FIND_BAR (self));
 
   if (self->terminal != NULL)
-    vte_terminal_search_find_next (VTE_TERMINAL (self->terminal));
+    ptyxis_terminal_search_find_next (self->terminal);
 }
 
 static void
@@ -120,7 +121,7 @@ ptyxis_find_bar_previous (GtkWidget  *widget,
   g_assert (PTYXIS_IS_FIND_BAR (self));
 
   if (self->terminal != NULL)
-    vte_terminal_search_find_previous (VTE_TERMINAL (self->terminal));
+    ptyxis_terminal_search_find_previous (self->terminal);
 }
 
 static void
@@ -128,22 +129,21 @@ ptyxis_find_bar_entry_changed_cb (PtyxisFindBar *self,
                                   GtkEntry      *entry)
 {
   g_autofree char *query = NULL;
-  g_autoptr(VteRegex) regex = NULL;
-  g_autoptr(GError) error = NULL;
-  guint flags = VTE_PCRE2_MULTILINE;
+  guint flags = 0;
 
   g_assert (PTYXIS_IS_FIND_BAR (self));
   g_assert (GTK_IS_ENTRY (entry));
-  g_assert (!self->terminal || VTE_IS_TERMINAL (self->terminal));
+  g_assert (!self->terminal || PTYXIS_IS_TERMINAL (self->terminal));
 
   if (self->terminal == NULL)
     return;
 
   if ((query = ptyxis_find_bar_get_search (self, &flags)))
-    regex = vte_regex_new_for_search (query, -1, flags, &error);
+    ptyxis_terminal_search_set_regex (self->terminal, query, flags);
+  else
+    ptyxis_terminal_search_set_regex (self->terminal, "", 0);
 
-  vte_terminal_search_set_regex (VTE_TERMINAL (self->terminal), regex, 0);
-  vte_terminal_search_set_wrap_around (VTE_TERMINAL (self->terminal), TRUE);
+  ptyxis_terminal_search_set_wrap_around (self->terminal, TRUE);
 }
 
 static void

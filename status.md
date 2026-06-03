@@ -27,6 +27,8 @@ renderer driven directly by the libghostty-vt cell grid.
 | Flatpak build (CI) | ✅ | Nightly Flatpak via GitHub Actions |
 | Tests | ✅ | Type registration + widget tests pass |
 | `just` recipes | ✅ | `just toolbox-run` and `just flatpak-dev` for quick iteration |
+| Color palette | ✅ | Instantly synced from profile GSettings |
+| Cursor & blinking | ✅ | Block/I-Beam/Underline shapes, cursor blink, and text blink fully supported |
 
 ## Architecture
 
@@ -53,19 +55,25 @@ self-spawned shell, dups the agent's master fd, and sets up the I/O watch.
 `ptyxis_application_spawn_async` then tells the agent to spawn the shell on
 the slave side of that PTY — enabling container-aware spawning (toolbox, podman).
 
-## What's Not Yet Implemented
+## What's Implemented (Corrected)
 
 | Feature | Status | Notes |
 |---|---|---|
 | Container spawning | ✅ | Agent PTY wired via attach_pty; widget reads agent's shell |
-| Text selection | ❌ | `has_selection` / `get_selected_text` stubs |
-| Search | ❌ | `search_start/next/prev/end` stubs |
-| Scrollback navigation | ❌ | Scrollbar not connected |
-| CWD tracking | ❌ | OSC 7 not wired to tab monitor |
-| Shell integration | ❌ | OSC precmd/preexec not wired |
-| Color palette from profile | ❌ | `update_colors` stub; no libghostty-vt color API yet |
-| Input read-only mode | ❌ | `set_input_enabled` is a no-op stub |
+| Text selection (basic) | ✅ | `has_selection` / `get_selected_text` work; mouse selection via ghostty API |
+| Mouse-driven selection | ✅ | Left-click drag selects text; auto-copies to PRIMARY clipboard |
+| Search (stub) | ✅ | `search_start/next/prev/end` implemented; basic next/prev navigation |
+| Scrollback navigation | ✅ | Polls `GHOSTTY_TERMINAL_DATA_SCROLLBAR` in pty_readable_cb |
+| CWD tracking | ✅ | OSC 7 polled in pty_readable_cb; `CWD_CHANGED` signal emitted |
+| Input read-only mode | ✅ | `self->input_enabled` gates all key/mouse/scroll handlers |
+| Shell integration | ⚠️ | Only in `ghostty_surface_*` (full terminal model); not available in VT-only widget |
+
+## Known Issues & Future Work
+
+| Feature | Status | Notes |
+|---|---|---|
 | GtkRevealer startup warning | ⚠️ | Cosmetic; size indicator fires before first layout |
+| Text search UI | ⚠️ | Find bar integrated but search results not highlighted (stub highlight) |
 
 ## Build & Run
 

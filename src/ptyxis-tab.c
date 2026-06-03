@@ -717,6 +717,79 @@ ptyxis_tab_decrease_font_size_cb (PtyxisTab      *self,
 }
 
 static void
+ptyxis_tab_terminal_child_exited_cb (PtyxisTab      *self,
+                                     int             status,
+                                     PtyxisTerminal *terminal)
+{
+  PtyxisExitAction exit_action;
+  AdwTabPage *page = NULL;
+  GtkWidget *tab_view;
+
+  g_assert (PTYXIS_IS_TAB (self));
+  g_assert (PTYXIS_IS_TERMINAL (terminal));
+
+  if (self->state != PTYXIS_TAB_STATE_RUNNING)
+    return;
+
+  if (WIFSIGNALED (status))
+    {
+      g_autofree char *title =
+        g_strdup_printf (_("Process Exited from Signal %d"), WTERMSIG (status));
+      self->state = PTYXIS_TAB_STATE_FAILED;
+      adw_banner_set_title (self->banner, title);
+      adw_banner_set_button_label (self->banner, _("_Restart"));
+      gtk_actionable_set_action_name (GTK_ACTIONABLE (self->banner), "tab.respawn");
+      gtk_widget_set_visible (GTK_WIDGET (self->banner), TRUE);
+      return;
+    }
+
+  if (WIFEXITED (status) && WEXITSTATUS (status) == 0)
+    self->state = PTYXIS_TAB_STATE_EXITED;
+  else
+    self->state = PTYXIS_TAB_STATE_FAILED;
+
+  exit_action = ptyxis_profile_get_exit_action (self->profile);
+  tab_view = gtk_widget_get_ancestor (GTK_WIDGET (self), ADW_TYPE_TAB_VIEW);
+
+  if (self->command != NULL)
+    exit_action = PTYXIS_EXIT_ACTION_CLOSE;
+
+  if (ADW_IS_TAB_VIEW (tab_view))
+    page = adw_tab_view_get_page (ADW_TAB_VIEW (tab_view), GTK_WIDGET (self));
+
+  adw_banner_set_title (self->banner, _("Process Exited"));
+  adw_banner_set_button_label (self->banner, _("_Restart"));
+  gtk_actionable_set_action_name (GTK_ACTIONABLE (self->banner), "tab.respawn");
+
+  /* If the shell exited immediately (< 0.5s) with no input, treat as failed */
+  if (self->state == PTYXIS_TAB_STATE_FAILED &&
+      (g_get_monotonic_time () - self->respawn_time) < (G_USEC_PER_SEC / 2) &&
+      !ptyxis_tab_monitor_get_has_pressed_key (self->monitor))
+    exit_action = PTYXIS_EXIT_ACTION_NONE;
+
+  switch (exit_action)
+    {
+    case PTYXIS_EXIT_ACTION_RESTART:
+      ptyxis_tab_respawn (self);
+      break;
+
+    case PTYXIS_EXIT_ACTION_CLOSE:
+      if (ADW_IS_TAB_VIEW (tab_view) && ADW_IS_TAB_PAGE (page))
+        {
+          if (adw_tab_page_get_pinned (page))
+            adw_tab_view_set_page_pinned (ADW_TAB_VIEW (tab_view), page, FALSE);
+          adw_tab_view_close_page (ADW_TAB_VIEW (tab_view), page);
+        }
+      break;
+
+    case PTYXIS_EXIT_ACTION_NONE:
+    default:
+      gtk_widget_set_visible (GTK_WIDGET (self->banner), TRUE);
+      break;
+    }
+}
+
+static void
 ptyxis_tab_bell_cb (PtyxisTab      *self,
                     PtyxisTerminal *terminal)
 {
@@ -1509,6 +1582,12 @@ ptyxis_tab_init (PtyxisTab *self)
   self->uuid = g_uuid_string_random ();
 
   gtk_widget_init_template (GTK_WIDGET (self));
+
+  g_signal_connect_object (self->terminal,
+                           "child-exited",
+                           G_CALLBACK (ptyxis_tab_terminal_child_exited_cb),
+                           self,
+                           G_CONNECT_SWAPPED);
 
   ptyxis_tab_notify_init (&self->notify, self);
 

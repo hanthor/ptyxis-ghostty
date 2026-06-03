@@ -97,6 +97,7 @@ enum {
   SHELL_PREEXEC,
   SLEWED,        /* Kept for API compat with existing signal consumers */
   CONTENTS_CHANGED,
+  CHILD_EXITED,
   N_SIGNALS
 };
 
@@ -162,9 +163,7 @@ ptyxis_terminal_on_child_exited(PtyxisGhosttyWidget *widget,
                                  PtyxisTerminal      *self)
 {
   (void)widget;
-  (void)status;
-  (void)self;
-  /* TODO: close tab on child exit */
+  g_signal_emit(self, signals[CHILD_EXITED], 0, status);
 }
 
 /* --- Color / Palette --- */
@@ -611,6 +610,11 @@ ptyxis_terminal_grid_size_changed_cb(PtyxisTerminal *self,
 
   text = g_strdup_printf("%u×%u", columns, rows);
   gtk_label_set_label(self->size_label, text);
+
+  /* Only animate if the widget is fully mapped; skips the initial sizing pass */
+  if (!gtk_widget_get_mapped(GTK_WIDGET(self)))
+    goto update_dims;
+
   gtk_revealer_set_reveal_child(self->size_revealer, TRUE);
 
   g_clear_handle_id(&self->size_dismiss_source, g_source_remove);
@@ -618,6 +622,7 @@ ptyxis_terminal_grid_size_changed_cb(PtyxisTerminal *self,
                                             ptyxis_terminal_size_dismiss_cb,
                                             self);
 
+update_dims:
   self->n_columns = columns;
   self->n_rows = rows;
 }
@@ -882,6 +887,15 @@ ptyxis_terminal_class_init(PtyxisTerminalClass *klass)
                  NULL, NULL,
                  NULL,
                  G_TYPE_NONE, 0);
+
+  signals[CHILD_EXITED] =
+    g_signal_new("child-exited",
+                 G_TYPE_FROM_CLASS(klass),
+                 G_SIGNAL_RUN_LAST,
+                 0,
+                 NULL, NULL,
+                 NULL,
+                 G_TYPE_NONE, 1, G_TYPE_INT);
 
   gtk_widget_class_set_template_from_resource(widget_class,
     "/org/gnome/Ptyxis/ptyxis-terminal.ui");

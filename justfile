@@ -55,20 +55,18 @@ toolbox-test: toolbox-build
 flatpak-build:
     flatpak run org.flatpak.Builder \
         --force-clean \
-        --user \
-        --install-deps-from=gnome-nightly \
         --repo='{{flatpak_repo}}' \
         '{{flatpak_bdir}}' \
         '{{project_dir}}/dev.hanthor.PtyxisGhostty.json'
 
-# Install the locally-built Flatpak for the current user
+# Install the locally-built Flatpak system-wide
 flatpak-install: flatpak-build
-    flatpak --user remote-add --no-gpg-verify --if-not-exists \
+    flatpak remote-add --no-gpg-verify --if-not-exists \
         ptyxis-ghostty-local '{{flatpak_repo}}'
-    flatpak --user install --reinstall -y \
+    flatpak install --reinstall -y \
         ptyxis-ghostty-local {{flatpak_id}}
 
-# Run the installed Flatpak
+# Run the installed Flatpak (system install)
 flatpak-run:
     flatpak run {{flatpak_id}}
 

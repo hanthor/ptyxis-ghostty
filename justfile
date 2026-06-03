@@ -59,16 +59,22 @@ flatpak-build:
         '{{flatpak_bdir}}' \
         '{{project_dir}}/dev.hanthor.PtyxisGhostty.json'
 
-# Install the locally-built Flatpak system-wide
+# Install the locally-built Flatpak (user install)
 flatpak-install: flatpak-build
-    flatpak remote-add --no-gpg-verify --if-not-exists \
+    flatpak remote-add --user --no-gpg-verify --if-not-exists \
         ptyxis-ghostty-local '{{flatpak_repo}}'
-    flatpak install --reinstall -y \
+    flatpak install --user --reinstall -y \
         ptyxis-ghostty-local {{flatpak_id}}
 
-# Run the installed Flatpak (system install)
+# Run the installed Flatpak
 flatpak-run:
-    flatpak run {{flatpak_id}}
+    flatpak run --user {{flatpak_id}}
 
 # Build, install, and run in one step
 flatpak-dev: flatpak-install flatpak-run
+
+# Run GUI smoke tests (requires a running GNOME Wayland session with AT-SPI)
+smoke-test:
+    cd '{{project_dir}}/testsuite/smoke' && \
+        pip install -q -r requirements.txt && \
+        behave features/ptyxis.feature

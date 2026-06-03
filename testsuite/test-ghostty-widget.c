@@ -207,6 +207,152 @@ test_widget_search_api(void)
   g_object_unref(widget);
 }
 
+static void
+test_widget_cursor_shape(void)
+{
+  GtkWidget *widget;
+
+  if (!gtk_init_check())
+    {
+      g_test_skip("No display/GTK backend available; skipping cursor shape test");
+      return;
+    }
+
+  widget = g_object_new(PTYXIS_TYPE_GHOSTTY_WIDGET, NULL);
+
+  /* All three cursor shapes should apply without crashing */
+  ptyxis_ghostty_widget_set_cursor_shape(PTYXIS_GHOSTTY_WIDGET(widget),
+                                         PTYXIS_CURSOR_SHAPE_BLOCK);
+  ptyxis_ghostty_widget_set_cursor_shape(PTYXIS_GHOSTTY_WIDGET(widget),
+                                         PTYXIS_CURSOR_SHAPE_IBEAM);
+  ptyxis_ghostty_widget_set_cursor_shape(PTYXIS_GHOSTTY_WIDGET(widget),
+                                         PTYXIS_CURSOR_SHAPE_UNDERLINE);
+  /* Round-trip back to block */
+  ptyxis_ghostty_widget_set_cursor_shape(PTYXIS_GHOSTTY_WIDGET(widget),
+                                         PTYXIS_CURSOR_SHAPE_BLOCK);
+
+  g_object_ref_sink(widget);
+  g_object_unref(widget);
+}
+
+static void
+test_widget_cursor_blink_mode(void)
+{
+  GtkWidget *widget;
+
+  if (!gtk_init_check())
+    {
+      g_test_skip("No display/GTK backend available; skipping cursor blink test");
+      return;
+    }
+
+  widget = g_object_new(PTYXIS_TYPE_GHOSTTY_WIDGET, NULL);
+
+  ptyxis_ghostty_widget_set_cursor_blink_mode(PTYXIS_GHOSTTY_WIDGET(widget),
+                                              PTYXIS_CURSOR_BLINK_SYSTEM);
+  ptyxis_ghostty_widget_set_cursor_blink_mode(PTYXIS_GHOSTTY_WIDGET(widget),
+                                              PTYXIS_CURSOR_BLINK_ON);
+  ptyxis_ghostty_widget_set_cursor_blink_mode(PTYXIS_GHOSTTY_WIDGET(widget),
+                                              PTYXIS_CURSOR_BLINK_OFF);
+
+  g_object_ref_sink(widget);
+  g_object_unref(widget);
+}
+
+static void
+test_widget_feed_vt_sequences(void)
+{
+  GtkWidget *widget;
+
+  if (!gtk_init_check())
+    {
+      g_test_skip("No display/GTK backend available; skipping feed test");
+      return;
+    }
+
+  widget = g_object_new(PTYXIS_TYPE_GHOSTTY_WIDGET, NULL);
+
+  /* Feed basic printable ASCII */
+  ptyxis_ghostty_widget_feed(PTYXIS_GHOSTTY_WIDGET(widget), "hello", 5);
+
+  /* Feed a carriage return + newline */
+  ptyxis_ghostty_widget_feed(PTYXIS_GHOSTTY_WIDGET(widget), "\r\n", 2);
+
+  /* Feed a clear-screen sequence (ESC [ 2 J) */
+  ptyxis_ghostty_widget_feed(PTYXIS_GHOSTTY_WIDGET(widget), "\033[2J", 4);
+
+  /* Feed cursor position sequence (ESC [ 1 ; 1 H) */
+  ptyxis_ghostty_widget_feed(PTYXIS_GHOSTTY_WIDGET(widget), "\033[1;1H", 6);
+
+  /* Feed bold/color SGR sequence */
+  ptyxis_ghostty_widget_feed(PTYXIS_GHOSTTY_WIDGET(widget), "\033[1;31mred\033[0m", 14);
+
+  /* Feed zero-length data — should be a no-op */
+  ptyxis_ghostty_widget_feed(PTYXIS_GHOSTTY_WIDGET(widget), "", 0);
+
+  g_object_ref_sink(widget);
+  g_object_unref(widget);
+}
+
+static void
+test_widget_feed_then_title(void)
+{
+  GtkWidget *widget;
+  char *title;
+
+  if (!gtk_init_check())
+    {
+      g_test_skip("No display/GTK backend available; skipping feed+title test");
+      return;
+    }
+
+  widget = g_object_new(PTYXIS_TYPE_GHOSTTY_WIDGET, NULL);
+
+  /* Default title before any OSC sequence */
+  title = ptyxis_ghostty_widget_get_window_title(PTYXIS_GHOSTTY_WIDGET(widget));
+  /* title may be NULL or empty — just check it doesn't crash */
+  g_free(title);
+
+  /* Set title via OSC 0 */
+  ptyxis_ghostty_widget_feed(PTYXIS_GHOSTTY_WIDGET(widget),
+                              "\033]0;My Terminal\007", 17);
+
+  title = ptyxis_ghostty_widget_get_window_title(PTYXIS_GHOSTTY_WIDGET(widget));
+  /* After the OSC sequence the title should be set (may need realize) */
+  g_free(title);
+
+  g_object_ref_sink(widget);
+  g_object_unref(widget);
+}
+
+static void
+test_widget_search_after_feed(void)
+{
+  GtkWidget *widget;
+
+  if (!gtk_init_check())
+    {
+      g_test_skip("No display/GTK backend available; skipping search-after-feed test");
+      return;
+    }
+
+  widget = g_object_new(PTYXIS_TYPE_GHOSTTY_WIDGET, NULL);
+
+  /* Write known text into the terminal buffer */
+  ptyxis_ghostty_widget_feed(PTYXIS_GHOSTTY_WIDGET(widget),
+                              "needle_unique_string\r\n", 22);
+
+  /* Search should find it (or at least not crash) */
+  ptyxis_ghostty_widget_search_start(PTYXIS_GHOSTTY_WIDGET(widget),
+                                     "needle_unique_string");
+  ptyxis_ghostty_widget_search_next(PTYXIS_GHOSTTY_WIDGET(widget));
+  ptyxis_ghostty_widget_search_previous(PTYXIS_GHOSTTY_WIDGET(widget));
+  ptyxis_ghostty_widget_search_end(PTYXIS_GHOSTTY_WIDGET(widget));
+
+  g_object_ref_sink(widget);
+  g_object_unref(widget);
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -232,6 +378,16 @@ main(int argc, char *argv[])
                   test_widget_paste_api);
   g_test_add_func("/Ptyxis/GhosttyWidget/search_api",
                   test_widget_search_api);
+  g_test_add_func("/Ptyxis/GhosttyWidget/cursor_shape",
+                  test_widget_cursor_shape);
+  g_test_add_func("/Ptyxis/GhosttyWidget/cursor_blink_mode",
+                  test_widget_cursor_blink_mode);
+  g_test_add_func("/Ptyxis/GhosttyWidget/feed_vt_sequences",
+                  test_widget_feed_vt_sequences);
+  g_test_add_func("/Ptyxis/GhosttyWidget/feed_then_title",
+                  test_widget_feed_then_title);
+  g_test_add_func("/Ptyxis/GhosttyWidget/search_after_feed",
+                  test_widget_search_after_feed);
 
   return g_test_run();
 }

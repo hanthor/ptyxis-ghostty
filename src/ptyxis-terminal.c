@@ -1201,7 +1201,7 @@ ptyxis_terminal_init(PtyxisTerminal *self)
 
   gtk_widget_init_template(GTK_WIDGET(self));
 
-  /* Create the ghostty widget child */
+  /* Create the ghostty widget child (after template init to ensure full initialization) */
   self->ghostty = ptyxis_ghostty_widget_new();
   g_signal_connect(self->ghostty, "grid-size-changed",
                    G_CALLBACK(ptyxis_terminal_on_grid_size_changed), self);

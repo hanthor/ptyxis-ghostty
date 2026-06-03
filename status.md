@@ -109,6 +109,6 @@ _prefix/bin/ptyxis
 | JSON-GLib | ≥ 1.6 | |
 | libportal-gtk4 | | Linux only |
 | libxml2 | | |
-| Zig | **0.16.0** | Required for ghostty build |
+| Zig | **0.15.2** | Required for ghostty build |
 | libghostty-vt | submodule | `zig build -Doptimize=ReleaseFast` |
 | just | any | Optional; for build recipes |

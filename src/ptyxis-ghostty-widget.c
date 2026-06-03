@@ -891,7 +891,13 @@ static void
 search_install_match(PtyxisGhosttyWidget *self)
 {
   g_return_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self));
-  g_return_if_fail(self->search_offsets != NULL);
+
+  /* If no search offsets have been built yet, clear selection */
+  if (self->search_offsets == NULL)
+    {
+      ghostty_terminal_set(self->terminal, GHOSTTY_TERMINAL_OPT_SELECTION, NULL);
+      return;
+    }
 
   if (self->search_current < 0 || (guint)self->search_current >= self->search_offsets->len)
     {

@@ -174,6 +174,39 @@ test_widget_paste_api(void)
   gtk_window_destroy(GTK_WINDOW(window));
 }
 
+static void
+test_widget_search_api(void)
+{
+  GtkWidget *widget;
+
+  if (!gtk_init_check())
+    {
+      g_test_skip("No display/GTK backend available; skipping search API test");
+      return;
+    }
+
+  widget = g_object_new(PTYXIS_TYPE_GHOSTTY_WIDGET, NULL);
+
+  /* Search with NULL needle (should not crash) */
+  ptyxis_ghostty_widget_search_start(PTYXIS_GHOSTTY_WIDGET(widget), NULL);
+
+  /* Search with empty string (should not crash) */
+  ptyxis_ghostty_widget_search_start(PTYXIS_GHOSTTY_WIDGET(widget), "");
+
+  /* Search with valid needle (should not crash) */
+  ptyxis_ghostty_widget_search_start(PTYXIS_GHOSTTY_WIDGET(widget), "test");
+
+  /* Navigate search results (should not crash even with no results) */
+  ptyxis_ghostty_widget_search_next(PTYXIS_GHOSTTY_WIDGET(widget));
+  ptyxis_ghostty_widget_search_previous(PTYXIS_GHOSTTY_WIDGET(widget));
+
+  /* End search (should not crash) */
+  ptyxis_ghostty_widget_search_end(PTYXIS_GHOSTTY_WIDGET(widget));
+
+  g_object_ref_sink(widget);
+  g_object_unref(widget);
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -197,6 +230,8 @@ main(int argc, char *argv[])
                   test_widget_selection_api_defaults);
   g_test_add_func("/Ptyxis/GhosttyWidget/paste_api",
                   test_widget_paste_api);
+  g_test_add_func("/Ptyxis/GhosttyWidget/search_api",
+                  test_widget_search_api);
 
   return g_test_run();
 }

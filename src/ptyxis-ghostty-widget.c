@@ -333,6 +333,7 @@ ptyxis_ghostty_widget_realize(GtkWidget *widget)
       sconfig.userdata = self;
       sconfig.scale_factor = gtk_widget_get_scale_factor(widget);
       sconfig.font_size = 12.0f;
+      sconfig.platform_tag = GHOSTTY_PLATFORM_LINUX;
 
       self->surface = ghostty_surface_new(self->app, &sconfig);
       if (self->surface == NULL)

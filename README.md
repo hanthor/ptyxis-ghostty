@@ -3,7 +3,8 @@
 > [!WARNING]
 > **Fork notice**: This is a fork of Ptyxis that replaces the VTE terminal
 > backend with [libghostty](https://github.com/ghostty-org/ghostty).
-> Work in progress — compiles and passes tests, rendering pipeline under active development.
+> Work in progress — compiles and launches, rendering blocked on Linux
+> embedded platform support. See [status.md](status.md) for details.
 
 ## Quick Install (Flatpak)
 
@@ -158,45 +159,44 @@ managed and providing a consistent experience across Linux distributions.
 
 ### Building from Source
 
-Ptyxis uses the Meson build system.
+> [!NOTE]
+> This fork replaces VTE with libghostty. The build process requires
+> building the ghostty library from source first. See [status.md](status.md)
+> for the full current build instructions and known issues.
 
-1. **Prerequisites:**
-    Ensure your system has the necessary development packages installed:
+#### Prerequisites
 
-    - C compiler (e.g., GCC, Clang)
-    - Meson (version 1.0.0 or newer)
-    - Ninja
-    - GLib (version 2.80 or newer, e.g., `libglib2.0-dev`)
-    - GTK4 (version 4.14 or newer, e.g., `libgtk-4-dev`)
-    - libadwaita (version 1.6 or newer, e.g., `libadwaita-1-dev`)
-    - JSON-GLib (version 1.6 or newer, e.g., `libjson-glib-dev`)
-    - VTE (GTK4 version, 0.79 or newer, e.g., `libvte-2.91-gtk4-dev`)
-    - libportal-gtk4 (on Linux, e.g., `libportal-gtk4-dev`)
+- Fedora 43+ (or equivalent development environment with GCC 15, Meson, GTK4)
+- **Zig 0.15.2** (exact version required — 0.16.0 will not work)
+- Meson ≥ 1.0.0, Ninja
+- GLib ≥ 2.80, GTK4 ≥ 4.14, libadwaita ≥ 1.7, JSON-GLib ≥ 1.6
+- libportal-gtk4 (Linux)
 
-2. **Clone the repository:**
+#### Quick build (Fedora toolbox)
 
-    ```bash
-    git clone https://gitlab.gnome.org/chergert/ptyxis.git
-    cd ptyxis
-    ```
+```bash
+# Clone with submodules
+git clone https://github.com/hanthor/ptyxis-ghostty.git
+cd ptyxis-ghostty
+git submodule update --init --recursive
 
-3. **Configure the build using Meson:**
+# Build libghostty (requires Zig 0.15.2)
+cd subprojects/ghostty
+zig build -Doptimize=ReleaseFast -Dapp-runtime=none
+cd ../..
 
-    ```bash
-    meson setup _build --prefix=/usr/local --buildtype=release
-    # Or --buildtype=debug for development
-    ```
+# Install ghostty artifacts
+GHOSTTY_PREFIX="$HOME/.cache/ghostty-install"
+mkdir -p "$GHOSTTY_PREFIX/lib" "$GHOSTTY_PREFIX/include/ghostty"
+cp subprojects/ghostty/zig-out/lib/ghostty-internal.so "$GHOSTTY_PREFIX/lib/libghostty.so"
+cp subprojects/ghostty/zig-out/include/ghostty.h "$GHOSTTY_PREFIX/include/"
+cp -r subprojects/ghostty/zig-out/include/ghostty/* "$GHOSTTY_PREFIX/include/ghostty/"
 
-4. **Compile:**
-
-    ```bash
-    meson compile -C _build
-    ```
-
-5. **Install (optional):**
-
-    ```bash
-    sudo meson install -C _build
+# Build ptyxis
+meson setup _build -Ddevelopment=true -Dlibc-compat=true \
+  -Dghostty_prefix="$GHOSTTY_PREFIX" -Dc_args="-Wno-error=unused-function"
+meson compile -C _build
+```
     ```
 
 **Using GNOME Builder:**

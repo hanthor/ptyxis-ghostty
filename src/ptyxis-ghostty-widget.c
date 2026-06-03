@@ -11,6 +11,7 @@
 
 #include "config.h"
 #include "ptyxis-ghostty-widget.h"
+#include "ptyxis-palette.h"
 
 #include <errno.h>
 #include <pty.h>
@@ -31,6 +32,7 @@ enum {
   CHILD_EXITED,
   GRID_SIZE_CHANGED,
   CONTENTS_CHANGED,
+  CWD_CHANGED,
   N_SIGNALS
 };
 
@@ -64,6 +66,7 @@ struct _PtyxisGhosttyWidget
 
   /* Terminal state */
   char    *title;
+  char    *cwd;
   gboolean has_focus;
 
   /* Selection */
@@ -160,6 +163,24 @@ pty_readable_cb(int fd, GIOCondition condition, gpointer user_data)
   /* Sync key encoder modes after terminal state changes */
   ghostty_key_encoder_setopt_from_terminal(self->key_encoder, self->terminal);
   ghostty_mouse_encoder_setopt_from_terminal(self->mouse_encoder, self->terminal);
+
+  /* Poll CWD and emit signal when it changes */
+  {
+    GhosttyString pwd = {0};
+    ghostty_terminal_get(self->terminal, GHOSTTY_TERMINAL_DATA_PWD, &pwd);
+    if (pwd.len > 0)
+      {
+        gboolean changed = self->cwd == NULL
+          || strlen(self->cwd) != pwd.len
+          || memcmp(self->cwd, pwd.ptr, pwd.len) != 0;
+        if (changed)
+          {
+            g_free(self->cwd);
+            self->cwd = g_strndup((const char *)pwd.ptr, pwd.len);
+            g_signal_emit(self, signals[CWD_CHANGED], 0, self->cwd);
+          }
+      }
+  }
 
   g_signal_emit(self, signals[CONTENTS_CHANGED], 0);
   gtk_widget_queue_draw(GTK_WIDGET(self));
@@ -368,6 +389,16 @@ color_rgb_to_rgba(GhosttyColorRgb c)
   };
 }
 
+static GhosttyColorRgb
+rgba_to_color_rgb(GdkRGBA c)
+{
+  return (GhosttyColorRgb){
+    .r = (uint8_t)CLAMP((int)(c.red   * 255 + 0.5), 0, 255),
+    .g = (uint8_t)CLAMP((int)(c.green * 255 + 0.5), 0, 255),
+    .b = (uint8_t)CLAMP((int)(c.blue  * 255 + 0.5), 0, 255),
+  };
+}
+
 static void
 ptyxis_ghostty_widget_snapshot(GtkWidget *widget, GtkSnapshot *snapshot)
 {
@@ -436,7 +467,9 @@ ptyxis_ghostty_widget_snapshot(GtkWidget *widget, GtkSnapshot *snapshot)
                                              GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_STYLE,
                                              &style);
 
-          GhosttyColorRgb fg_c, bg_c;
+          GhosttyColorRgb fg_c = colors.foreground;
+          GhosttyColorRgb bg_c = colors.background;
+          /* FG/BG return GHOSTTY_INVALID_VALUE for default-color cells */
           ghostty_render_state_row_cells_get(cells,
                                              GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_FG_COLOR,
                                              &fg_c);
@@ -1033,6 +1066,7 @@ ptyxis_ghostty_widget_finalize(GObject *object)
   PtyxisGhosttyWidget *self = PTYXIS_GHOSTTY_WIDGET(object);
 
   g_clear_pointer(&self->title,     g_free);
+  g_clear_pointer(&self->cwd,       g_free);
   g_clear_pointer(&self->font_desc, pango_font_description_free);
 
   if (self->key_encoder != NULL)
@@ -1088,9 +1122,58 @@ ptyxis_ghostty_widget_class_init(PtyxisGhosttyWidgetClass *klass)
   signals[CONTENTS_CHANGED] = g_signal_new("contents-changed",
     G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST,
     0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+
+  signals[CWD_CHANGED] = g_signal_new("cwd-changed",
+    G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST,
+    0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_STRING);
 }
 
 /* ---- Public API ---- */
+
+void
+ptyxis_ghostty_widget_update_colors(PtyxisGhosttyWidget    *self,
+                                    const PtyxisPaletteFace *face)
+{
+  GhosttyColorRgb palette[256];
+
+  g_return_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self));
+  g_return_if_fail(face != NULL);
+
+  /* ANSI colors 0-15 from palette face */
+  for (int i = 0; i < 16; i++)
+    palette[i] = rgba_to_color_rgb(face->indexed[i]);
+
+  /* xterm 216-color cube: indices 16-231 */
+  for (int i = 0; i < 216; i++)
+    {
+      int r = i / 36;
+      int g = (i % 36) / 6;
+      int b = i % 6;
+      palette[16 + i] = (GhosttyColorRgb){
+        .r = r ? (uint8_t)(r * 40 + 55) : 0,
+        .g = g ? (uint8_t)(g * 40 + 55) : 0,
+        .b = b ? (uint8_t)(b * 40 + 55) : 0,
+      };
+    }
+
+  /* Grayscale ramp: indices 232-255 */
+  for (int i = 0; i < 24; i++)
+    {
+      uint8_t v = (uint8_t)(8 + i * 10);
+      palette[232 + i] = (GhosttyColorRgb){ .r = v, .g = v, .b = v };
+    }
+
+  GhosttyColorRgb fg     = rgba_to_color_rgb(face->foreground);
+  GhosttyColorRgb bg     = rgba_to_color_rgb(face->background);
+  GhosttyColorRgb cursor = rgba_to_color_rgb(face->cursor_bg);
+
+  ghostty_terminal_set(self->terminal, GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, &fg);
+  ghostty_terminal_set(self->terminal, GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, &bg);
+  ghostty_terminal_set(self->terminal, GHOSTTY_TERMINAL_OPT_COLOR_CURSOR, &cursor);
+  ghostty_terminal_set(self->terminal, GHOSTTY_TERMINAL_OPT_COLOR_PALETTE, palette);
+
+  gtk_widget_queue_draw(GTK_WIDGET(self));
+}
 
 void
 ptyxis_ghostty_widget_attach_pty(PtyxisGhosttyWidget *self, int fd)

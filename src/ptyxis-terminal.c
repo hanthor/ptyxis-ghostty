@@ -83,12 +83,16 @@ struct _PtyxisTerminal
 
   /* PTY managed by ptyxis-agent (container-aware) */
   VtePty                *pty;
+
+  /* Current working directory (from OSC 7 via ghostty) */
+  char                  *cwd;
 };
 
 enum {
   PROP_0,
   PROP_CURRENT_CONTAINER_NAME,
   PROP_CURRENT_CONTAINER_RUNTIME,
+  PROP_CURRENT_DIRECTORY_URI,
   PROP_PALETTE,
   PROP_SHORTCUTS,
   N_PROPS
@@ -170,6 +174,18 @@ ptyxis_terminal_on_child_exited(PtyxisGhosttyWidget *widget,
   g_signal_emit(self, signals[CHILD_EXITED], 0, status);
 }
 
+static void
+ptyxis_terminal_on_cwd_changed(PtyxisGhosttyWidget *widget,
+                                const char          *cwd,
+                                PtyxisTerminal      *self)
+{
+  (void)widget;
+  g_free(self->cwd);
+  /* ghostty gives us raw paths; wrap as file:// URI */
+  self->cwd = cwd != NULL ? g_strdup_printf("file://%s", cwd) : NULL;
+  g_object_notify_by_pspec(G_OBJECT(self), properties[PROP_CURRENT_DIRECTORY_URI]);
+}
+
 /* --- Color / Palette --- */
 
 static void
@@ -190,10 +206,8 @@ ptyxis_terminal_update_colors(PtyxisTerminal *self)
 
   self->background = face->background;
 
-  /* TODO: feed palette into libghostty-vt terminal via
-   * GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND/BACKGROUND/PALETTE once
-   * PtyxisGhosttyWidget exposes an update_colors() method */
-  (void)face;
+  if (self->ghostty != NULL)
+    ptyxis_ghostty_widget_update_colors(self->ghostty, face);
 
   gtk_widget_queue_draw(GTK_WIDGET(self));
 }
@@ -728,6 +742,7 @@ ptyxis_terminal_finalize(GObject *object)
   PtyxisTerminal *self = PTYXIS_TERMINAL(object);
 
   g_clear_pointer(&self->url, g_free);
+  g_clear_pointer(&self->cwd, g_free);
   g_clear_pointer(&self->current_container_name, g_free);
   g_clear_pointer(&self->current_container_runtime, g_free);
   g_clear_pointer(&self->custom_links, g_hash_table_unref);
@@ -753,6 +768,10 @@ ptyxis_terminal_get_property(GObject    *object,
 
     case PROP_CURRENT_CONTAINER_RUNTIME:
       g_value_set_string(value, ptyxis_terminal_get_current_container_runtime(self));
+      break;
+
+    case PROP_CURRENT_DIRECTORY_URI:
+      g_value_set_string(value, self->cwd);
       break;
 
     case PROP_PALETTE:
@@ -815,6 +834,13 @@ ptyxis_terminal_class_init(PtyxisTerminalClass *klass)
     g_param_spec_string("current-container-runtime", NULL, NULL,
                         NULL,
                         (G_PARAM_READABLE |
+                         G_PARAM_STATIC_STRINGS));
+
+  properties[PROP_CURRENT_DIRECTORY_URI] =
+    g_param_spec_string("current-directory-uri", NULL, NULL,
+                        NULL,
+                        (G_PARAM_READABLE |
+                         G_PARAM_EXPLICIT_NOTIFY |
                          G_PARAM_STATIC_STRINGS));
 
   properties[PROP_PALETTE] =
@@ -963,6 +989,8 @@ ptyxis_terminal_init(PtyxisTerminal *self)
                    G_CALLBACK(ptyxis_terminal_on_child_exited), self);
   g_signal_connect_swapped(self->ghostty, "contents-changed",
                            G_CALLBACK(ptyxis_terminal_contents_changed_cb), self);
+  g_signal_connect(self->ghostty, "cwd-changed",
+                   G_CALLBACK(ptyxis_terminal_on_cwd_changed), self);
   gtk_widget_set_parent(GTK_WIDGET(self->ghostty), GTK_WIDGET(self));
 
   /* Listen to shortcuts */
@@ -1108,8 +1136,7 @@ char *
 ptyxis_terminal_dup_current_directory_uri(PtyxisTerminal *self)
 {
   g_return_val_if_fail(PTYXIS_IS_TERMINAL(self), NULL);
-  /* TODO: Track CWD via ghostty PWD action callback */
-  return NULL;
+  return g_strdup(self->cwd);
 }
 
 /* --- VTE compat delegates ---- */

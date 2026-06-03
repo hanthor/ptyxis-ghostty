@@ -52,8 +52,8 @@
             "build-commands": [
                 "install -Dm755 libghostty.so /app/lib/libghostty.so",
                 "install -Dm644 ghostty.h /app/include/ghostty.h",
-                "mkdir -p /app/include/ghostty",
-                "cp -r ghostty/* /app/include/ghostty/"
+                "mkdir -p /app/include/ghostty/vt",
+                "install -Dm644 vt.h /app/include/ghostty/vt.h"
             ],
             "sources": [
                 {
@@ -65,8 +65,8 @@
                     "path": "ghostty-build/ghostty.h"
                 },
                 {
-                    "type": "dir",
-                    "path": "ghostty-build/ghostty"
+                    "type": "file",
+                    "path": "ghostty-build/ghostty/vt.h"
                 }
             ]
         },

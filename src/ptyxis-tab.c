@@ -533,6 +533,8 @@ ptyxis_tab_respawn (PtyxisTab *self)
   PtyxisApplication *app;
   const char *profile_uuid;
   const char *cwd_uri;
+  VtePty *pty;
+  g_autoptr(VtePty) new_pty = NULL;
 
   g_assert (PTYXIS_IS_TAB (self));
   g_assert (self->state == PTYXIS_TAB_STATE_INITIAL ||

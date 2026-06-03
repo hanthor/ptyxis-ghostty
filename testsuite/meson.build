@@ -8,6 +8,9 @@ test_env = [
   'GTK_A11Y=none',
   # Force X11 backend so Xvfb is used; avoids Wayland/XDG_RUNTIME_DIR issues
   'GDK_BACKEND=x11',
+  # Software rendering for headless CI (meson test doesn't inherit container env)
+  'LIBGL_ALWAYS_SOFTWARE=1',
+  'GALLIUM_DRIVER=llvmpipe',
 ]
 
 testsuite_c_args = [

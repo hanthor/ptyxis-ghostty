@@ -53,7 +53,7 @@ jobs:
               meson gcc gettext desktop-file-utils appstream \
               glib2-devel gtk4-devel libadwaita-devel \
               json-glib-devel git pkgconf-pkg-config libportal-gtk4-devel \
-              libxml2-devel mesa-dri-drivers xorg-x11-server-Xvfb dbus-daemon &&
+              libxml2-devel mesa-dri-drivers mesa-libGLES xorg-x11-server-Xvfb dbus-daemon &&
             # D-Bus and ghostty require a machine-id to be present
             echo "ffffffffffffffffffffffffffffffff" > /etc/machine-id &&
             dbus-uuidgen --ensure &&

@@ -601,17 +601,16 @@ static void
 test_widget_feed_unicode(void)
 {
   GtkWidget *widget;
+  const char *japanese = "こんにちは\r\n";
+  const char *accented  = "café résumé naïve\r\n";
+  const char *boxdraw   = "┌─┐\r\n│ │\r\n└─┘\r\n";
+  const char *emoji     = "\xF0\x9F\x98\x80\r\n";
 
   if (!gtk_init_check())
     {
       g_test_skip("No display/GTK backend available; skipping feed unicode test");
       return;
     }
-
-  const char *japanese = "こんにちは\r\n";
-  const char *accented  = "café résumé naïve\r\n";
-  const char *boxdraw   = "┌─┐\r\n│ │\r\n└─┘\r\n";
-  const char *emoji     = "\xF0\x9F\x98\x80\r\n";
 
   widget = g_object_new(PTYXIS_TYPE_GHOSTTY_WIDGET, NULL);
 

@@ -11,8 +11,7 @@
         "--share=network",
         "--socket=fallback-x11",
         "--socket=wayland",
-        "--talk-name=org.freedesktop.Flatpak",
-        "--talk-name=org.freedesktop.DBus"
+        "--talk-name=org.freedesktop.Notifications"
     ],
     "x-run-args": [
         "--standalone"

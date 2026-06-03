@@ -22,44 +22,44 @@ jobs:
         with:
           version: 0.15.2
 
-      - name: Build libghostty
+      - name: Build libghostty-vt
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq gettext
           cd subprojects/ghostty
           zig build -Doptimize=ReleaseFast -Dapp-runtime=none
-          mkdir -p "${{ github.workspace }}/ghostty-build/ghostty"
-          cp zig-out/lib/libghostty.so "${{ github.workspace }}/ghostty-build/" 2>/dev/null || \
-            find zig-out -name 'libghostty*.so' -o -name 'ghostty-internal.so' | head -1 | xargs -I{} cp {} "${{ github.workspace }}/ghostty-build/libghostty.so"
-          cp include/ghostty.h "${{ github.workspace }}/ghostty-build/"
-          cp -r include/ghostty/* "${{ github.workspace }}/ghostty-build/ghostty/"
-          ls -la "${{ github.workspace }}/ghostty-build/"
+          echo "=== zig-out/lib contents ==="
+          ls -la zig-out/lib/
+          echo "=== zig-out/include contents ==="
+          ls -la zig-out/include/
+          ls -la zig-out/include/ghostty/ | head -10
 
-      - name: Upload ghostty build
+      - name: Upload ghostty zig-out
         uses: actions/upload-artifact@v4
         with:
-          name: ghostty-build
-          path: ghostty-build/
+          name: ghostty-zig-out
+          path: subprojects/ghostty/zig-out/
 
   flatpak:
     name: Flatpak Build
     needs: build-ghostty
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-49
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-50
       options: --privileged
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download ghostty build
+      - name: Restore ghostty zig-out
         uses: actions/download-artifact@v4
         with:
-          name: ghostty-build
-          path: ghostty-build
+          name: ghostty-zig-out
+          path: subprojects/ghostty/zig-out
 
-      - name: Verify ghostty files
+      - name: Verify ghostty artifacts
         run: |
-          ls -la ghostty-build/
-          file ghostty-build/libghostty.so
+          echo "=== subprojects/ghostty/zig-out/lib ==="
+          ls -la subprojects/ghostty/zig-out/lib/
+          echo "=== libghostty-vt.so.0.1.0 ==="
+          file subprojects/ghostty/zig-out/lib/libghostty-vt.so.0.1.0
 
       - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:

@@ -1,10 +1,11 @@
 # Ptyxis Ghostty — Container-native terminal powered by libghostty
 
-> [!WARNING]
-> **Fork notice**: This is a fork of Ptyxis that replaces the VTE terminal
-> backend with [libghostty](https://github.com/ghostty-org/ghostty).
-> Work in progress — compiles and launches, rendering blocked on Linux
-> embedded platform support. See [status.md](status.md) for details.
+> [!NOTE]
+> **Fork notice**: This is a fork of [Ptyxis](https://gitlab.gnome.org/chergert/ptyxis)
+> that replaces the VTE terminal backend with
+> [libghostty-vt](https://github.com/ghostty-org/ghostty) — the same
+> high-performance terminal emulation library that powers the Ghostty terminal.
+> See [status.md](status.md) for the current feature status.
 
 ## Quick Install (Flatpak)
 
@@ -82,8 +83,8 @@ and performance.
   (`ptyxis-agent`) enables full functionality even when Ptyxis is run as a
   Flatpak by managing PTY creation, direct container interaction, and host
   process monitoring.
-- **High-Performance Rendering**: Leverages the VTE (Virtual Terminal
-  Emulator) library with GPU acceleration (Vulkan/OpenGL where available)
+- **High-Performance Rendering**: Powered by libghostty-vt — the same
+  battle-tested terminal emulation engine used by the Ghostty terminal —
   for a remarkably fluid and responsive terminal experience.
 - **Terminal Inspector**: An integrated developer tool for debugging
   terminal-based applications by allowing inspection of OSC (Operating System
@@ -91,8 +92,7 @@ and performance.
 - **Encrypted Scrollback Buffers**: Enhances privacy for your terminal
   session history.
 - **Accessibility**: Designed with accessibility at its core, building upon
-  GTK4 and VTE accessibility features to support screen readers and other
-  assistive technologies effectively.
+  GTK4 and AT-SPI to support screen readers and other assistive technologies.
 
 ---
 
@@ -177,28 +177,33 @@ managed and providing a consistent experience across Linux distributions.
 
 ```bash
 # Clone with submodules
-git clone https://github.com/hanthor/ptyxis-ghostty.git
-cd ptyxis-ghostty/ptyxis
-git submodule update --init --recursive
+git clone --recurse-submodules https://github.com/hanthor/ptyxis-ghostty.git
+cd ptyxis-ghostty
 
-# Build libghostty (requires Zig 0.15.2)
+# Build libghostty-vt (requires Zig 0.15.2 — exact version)
 cd subprojects/ghostty
 zig build -Doptimize=ReleaseFast -Dapp-runtime=none
 cd ../..
 
-# Install ghostty artifacts
-GHOSTTY_PREFIX="$HOME/.cache/ghostty-install"
-mkdir -p "$GHOSTTY_PREFIX/lib" "$GHOSTTY_PREFIX/include/ghostty"
-cp subprojects/ghostty/zig-out/lib/ghostty-internal.so "$GHOSTTY_PREFIX/lib/libghostty.so"
-cp subprojects/ghostty/zig-out/include/ghostty.h "$GHOSTTY_PREFIX/include/"
-cp -r subprojects/ghostty/zig-out/include/ghostty/* "$GHOSTTY_PREFIX/include/ghostty/"
-
-# Build ptyxis
-meson setup _build -Ddevelopment=true -Dlibc-compat=true \
-  -Dghostty_prefix="$GHOSTTY_PREFIX" -Dc_args="-Wno-error=unused-function"
+# Build ptyxis-ghostty (links against subprojects/ghostty/zig-out)
+meson setup _build \
+  -Ddevelopment=true \
+  -Dlibc-compat=true \
+  -Dghostty_prefix="$(pwd)/subprojects/ghostty/zig-out"
 meson compile -C _build
+
+# Run tests
+LD_LIBRARY_PATH=subprojects/ghostty/zig-out/lib meson test -C _build --print-errorlogs
 ```
-    ```
+
+Or use the `just` recipes (requires [just](https://github.com/casey/just)):
+
+```bash
+just toolbox-build   # build inside the 'finupdate' toolbox
+just flatpak-build   # build as a Flatpak
+just flatpak-install # build + install to user Flatpak
+just flatpak-run     # run the installed Flatpak
+```
 
 **Using GNOME Builder:**
 [GNOME Builder](https://apps.gnome.org/Builder/) provides an excellent
@@ -252,7 +257,7 @@ The user-facing GTK4/libadwaita application manages:
 
 - Windows, tabs, and the graphical interface.
 - User profiles, theming (palettes, "Window Dressing"), and shortcuts.
-- Displaying terminal content via the VTE widget.
+- Displaying terminal content via the libghostty-vt widget.
 - Communication with `ptyxis-agent`.
 
 ### `ptyxis-agent`
@@ -285,7 +290,7 @@ development environments.
     runtime (e.g., `podman exec -it ...`, `toolbox enter ...`,
     `distrobox enter ...`). It manages PTY setup and I/O.
 3. **Context Management:**
-    - Active container identified by VTE termprops (e.g., `vte.container.name`).
+    - Active container identified by terminal escape sequences (OSC 7, OSC 777 variants).
     - CWD and select environment variables can be propagated into containers.
     - Profiles specify default container and inheritance behavior.
     - URI translation for "Open Link" from containers.
@@ -405,30 +410,21 @@ referencing the design discussion/specification.
 ## Troubleshooting Issues
 
 - **Notifications Don't Work (e.g., command completion):**
-  Ensure your shell (e.g., `~/.bashrc`, `~/.zshrc`) sources
-  `/etc/profile.d/vte.sh`. This script, provided by VTE packages, sets up shell hooks for VTE's terminal property
-  escape sequences used by Ptyxis.
-
-  - Verify `vte.sh` exists and is sourced by your shell.
-  - If needed, manually add to your shell's rc file:
-    `if [ -f /etc/profile.d/vte.sh ]; then . /etc/profile.d/vte.sh; fi`
+  Shell integration in this fork uses OSC 7 (current directory) only.
+  The VTE shell hooks (`vte.sh`) are not used. If your shell does not emit
+  OSC 7, CWD tracking will not update.
 
 - **GPU/Font Rendering Issues:**
-  Problems with GPU rendering or font rendering (especially with HiDPI
-  scaling) are often rooted in GTK, VTE, graphics drivers, or compositor
-  interactions.
+  Problems with GPU rendering or font rendering are often rooted in GTK,
+  graphics drivers, or compositor interactions.
 
-  - Try different fonts or rendering settings.
-  - Report persistent issues to [GNOME/gtk Issues](https://gitlab.gnome.org/GNOME/gtk/-/issues)
-    or [GNOME/vte Issues](https://gitlab.gnome.org/GNOME/vte/-/issues),
-    providing Ptyxis/GTK/VTE versions, OS, GPU/driver, scaling factor,
-    and steps to reproduce.
+  - Try setting `GSK_RENDERER=cairo` for software rendering.
+  - Report persistent issues with Ptyxis/GTK/libghostty versions, OS,
+    GPU/driver, scaling factor, and steps to reproduce.
 
 - **Container Detection for `toolbox`, `podman`, `distrobox`:**
-  Reliable automatic container detection relies on these tools emitting VTE
-  escape sequences (like OSC 777).
-  - Use **recent versions** of container tools.
-  - Check tool/distribution documentation for VTE integration settings.
+  Container detection relies on OSC 7 / OSC 777 escape sequences.
+  - Use **recent versions** of container tools that emit OSC 777.
   - If detection fails, create a Ptyxis profile to launch commands
     explicitly in the target container.
 
@@ -445,5 +441,5 @@ The source code includes a copy of the license in the `COPYING` file.
 
 Ptyxis is primarily developed by **Christian Hergert**. It evolves concepts
 from [GNOME Builder](https://apps.gnome.org/app/org.gnome.Builder/) and was
-motivated by VTE performance/feature enhancements for Wayland. The aim is a
+motivated by terminal performance improvements for Wayland. The aim is a
 fast, feature-rich, container-aware terminal for GNOME.

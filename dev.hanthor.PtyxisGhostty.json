@@ -3,9 +3,6 @@
     "runtime": "org.gnome.Platform",
     "runtime-version": "49",
     "sdk": "org.gnome.Sdk",
-    "sdk-extensions": [
-        "org.freedesktop.Sdk.Extension.zig"
-    ],
     "command": "ptyxis",
     "finish-args": [
         "--device=dri",
@@ -53,17 +50,23 @@
             "name": "ghostty",
             "buildsystem": "simple",
             "build-commands": [
-                ". /usr/lib/sdk/zig/enable.sh",
-                "zig build -Doptimize=ReleaseFast -Dapp-runtime=none --prefix /app",
-                "install -Dm755 zig-out/lib/libghostty.so /app/lib/libghostty.so",
-                "install -Dm644 include/ghostty.h /app/include/ghostty.h",
-                "cp -r include/ghostty /app/include/ghostty"
+                "install -Dm755 libghostty.so /app/lib/libghostty.so",
+                "install -Dm644 ghostty.h /app/include/ghostty.h",
+                "mkdir -p /app/include/ghostty",
+                "cp -r ghostty/* /app/include/ghostty/"
             ],
             "sources": [
                 {
-                    "type": "git",
-                    "url": "https://github.com/ghostty-org/ghostty.git",
-                    "commit": "5758e149319d244cbf2d21d1ae8d1376adaf1f91"
+                    "type": "file",
+                    "path": "ghostty-build/libghostty.so"
+                },
+                {
+                    "type": "file",
+                    "path": "ghostty-build/ghostty.h"
+                },
+                {
+                    "type": "dir",
+                    "path": "ghostty-build/ghostty"
                 }
             ]
         },
@@ -78,9 +81,8 @@
             ],
             "sources": [
                 {
-                    "type": "git",
-                    "url": "https://github.com/hanthor/ptyxis-ghostty.git",
-                    "branch": "main"
+                    "type": "dir",
+                    "path": "."
                 }
             ]
         }

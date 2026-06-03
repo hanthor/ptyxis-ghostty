@@ -1,6 +1,7 @@
 ptyxis_sources = [
   'gdkhsla.c',
   'main.c',
+  'ptyxis-compat.c',
   'ptyxis-add-button-list-item.c',
   'ptyxis-add-button-list-model.c',
   'ptyxis-application.c',

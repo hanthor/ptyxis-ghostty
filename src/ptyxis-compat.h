@@ -33,6 +33,9 @@ typedef struct _VteEventContext VteEventContext;
 #define VTE_IS_PTY(p)       TRUE
 /* Replacement enums for VTE cursor/erase/blink types */
 
+GType ptyxis_erase_binding_get_type(void);
+#define PTYXIS_TYPE_ERASE_BINDING (ptyxis_erase_binding_get_type())
+
 typedef enum {
   PTYXIS_ERASE_AUTO = 0,
   PTYXIS_ERASE_ASCII_BACKSPACE = 1,
@@ -42,7 +45,10 @@ typedef enum {
 } PtyxisEraseBinding;
 #define VteEraseBinding PtyxisEraseBinding
 #define VTE_ERASE_AUTO PTYXIS_ERASE_AUTO
-#define VTE_TYPE_ERASE_BINDING 0
+#define VTE_TYPE_ERASE_BINDING PTYXIS_TYPE_ERASE_BINDING
+
+GType ptyxis_cursor_blink_mode_get_type(void);
+#define PTYXIS_TYPE_CURSOR_BLINK_MODE (ptyxis_cursor_blink_mode_get_type())
 
 typedef enum {
   PTYXIS_CURSOR_BLINK_SYSTEM = 0,
@@ -51,7 +57,10 @@ typedef enum {
 } PtyxisCursorBlinkMode;
 #define VteCursorBlinkMode PtyxisCursorBlinkMode
 #define VTE_CURSOR_BLINK_SYSTEM PTYXIS_CURSOR_BLINK_SYSTEM
-#define VTE_TYPE_CURSOR_BLINK_MODE 0
+#define VTE_TYPE_CURSOR_BLINK_MODE PTYXIS_TYPE_CURSOR_BLINK_MODE
+
+GType ptyxis_cursor_shape_get_type(void);
+#define PTYXIS_TYPE_CURSOR_SHAPE (ptyxis_cursor_shape_get_type())
 
 typedef enum {
   PTYXIS_CURSOR_SHAPE_BLOCK = 0,
@@ -60,7 +69,10 @@ typedef enum {
 } PtyxisCursorShape;
 #define VteCursorShape PtyxisCursorShape
 #define VTE_CURSOR_SHAPE_BLOCK PTYXIS_CURSOR_SHAPE_BLOCK
-#define VTE_TYPE_CURSOR_SHAPE 0
+#define VTE_TYPE_CURSOR_SHAPE PTYXIS_TYPE_CURSOR_SHAPE
+
+GType ptyxis_text_blink_mode_get_type(void);
+#define PTYXIS_TYPE_TEXT_BLINK_MODE (ptyxis_text_blink_mode_get_type())
 
 typedef enum {
   PTYXIS_TEXT_BLINK_NEVER = 0,
@@ -70,7 +82,7 @@ typedef enum {
 } PtyxisTextBlinkMode;
 #define VteTextBlinkMode PtyxisTextBlinkMode
 #define VTE_TEXT_BLINK_ALWAYS PTYXIS_TEXT_BLINK_ALWAYS
-#define VTE_TYPE_TEXT_BLINK_MODE 0
+#define VTE_TYPE_TEXT_BLINK_MODE PTYXIS_TYPE_TEXT_BLINK_MODE
 
 /* VTE property IDs - stubs */
 #define VTE_PROPERTY_ID_CONTAINER_NAME          1

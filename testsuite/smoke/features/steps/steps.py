@@ -214,6 +214,29 @@ def type_text(context, text, app_id):
         raise AssertionError(f"Failed to type text in {app_id!r}: {exc}") from exc
 
 
+# ── Widget gone ───────────────────────────────────────────────────────────
+
+@step('Wait until "{name}" "{role}" is gone from "{app_id}" within {seconds:d} seconds')
+def wait_until_widget_gone(context, name, role, app_id, seconds):
+    """Wait for a named widget (by role+name substring) to disappear."""
+    app = getattr(context, app_id).instance
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        try:
+            matches = app.findChildren(
+                lambda n: n.roleName == role
+                and name.lower() in (n.name or "").lower()
+            )
+            if not matches:
+                return
+        except Exception:
+            return  # app gone = widget gone
+        time.sleep(0.3)
+    raise AssertionError(
+        f"{role!r} named {name!r} was still present in {app_id!r} after {seconds}s"
+    )
+
+
 # ── Application gone ──────────────────────────────────────────────────────
 
 @step('Wait until application "{app_id}" is gone within {seconds:d} seconds')

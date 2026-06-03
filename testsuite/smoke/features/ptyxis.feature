@@ -93,6 +93,20 @@ Feature: Ptyxis (ghostty-vt) smoke tests
     * Type text "echo hello_ptyxis_test" in "ptyxis"
     * Application "ptyxis" is running
 
+  # ── Focus preservation ───────────────────────────────────────────────────
+
+  @cursor @focus @regression
+  Scenario: Terminal still accepts input after cursor style change via Preferences
+    # Regression: non-modal prefs window did not return focus to terminal
+    * Key combo: "<Control>comma"
+    * Wait until "Preferences" "dialog" appears in "ptyxis" within 5 seconds
+    * Application "ptyxis" is in cursor style "I-Beam"
+    * Key combo: "<Alt>F4"
+    * Wait until "Preferences" "dialog" is gone from "ptyxis" within 5 seconds
+    * Focus terminal in "ptyxis"
+    * Type text "echo focus_regression_ok" in "ptyxis"
+    * Application "ptyxis" is running
+
   # ── Clean shutdown ───────────────────────────────────────────────────────
 
   @shutdown

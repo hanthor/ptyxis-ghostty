@@ -991,20 +991,42 @@ static void
 focus_enter_cb(GtkEventControllerFocus *focus,
                PtyxisGhosttyWidget     *self)
 {
+  char buf[8];
+  size_t written = 0;
+
   (void)focus;
   self->has_focus = TRUE;
   update_blink_timer(self);
   gtk_widget_queue_draw(GTK_WIDGET(self));
+
+  /* Send CSI I to the PTY for programs using focus-tracking mode (1004) */
+  if (self->pty_fd >= 0 && self->terminal != NULL)
+    {
+      if (ghostty_focus_encode(GHOSTTY_FOCUS_GAINED, buf, sizeof(buf), &written)
+          == GHOSTTY_SUCCESS && written > 0)
+        (void)write(self->pty_fd, buf, written);
+    }
 }
 
 static void
 focus_leave_cb(GtkEventControllerFocus *focus,
                PtyxisGhosttyWidget     *self)
 {
+  char buf[8];
+  size_t written = 0;
+
   (void)focus;
   self->has_focus = FALSE;
   update_blink_timer(self);
   gtk_widget_queue_draw(GTK_WIDGET(self));
+
+  /* Send CSI O to the PTY for programs using focus-tracking mode (1004) */
+  if (self->pty_fd >= 0 && self->terminal != NULL)
+    {
+      if (ghostty_focus_encode(GHOSTTY_FOCUS_LOST, buf, sizeof(buf), &written)
+          == GHOSTTY_SUCCESS && written > 0)
+        (void)write(self->pty_fd, buf, written);
+    }
 }
 
 static void

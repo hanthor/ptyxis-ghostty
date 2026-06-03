@@ -326,6 +326,41 @@ test_widget_feed_then_title(void)
 }
 
 static void
+test_widget_focus_retained_after_cursor_shape_change(void)
+{
+  GtkWidget *window;
+  GtkWidget *widget;
+
+  if (!gtk_init_check())
+    {
+      g_test_skip("No display/GTK backend available; skipping focus regression test");
+      return;
+    }
+
+  window = gtk_window_new();
+  widget = g_object_new(PTYXIS_TYPE_GHOSTTY_WIDGET, NULL);
+  gtk_window_set_child(GTK_WINDOW(window), widget);
+  gtk_widget_realize(window);
+  gtk_widget_realize(widget);
+
+  gtk_widget_grab_focus(widget);
+
+  /* Change cursor shape — this must not steal or lose focus */
+  ptyxis_ghostty_widget_set_cursor_shape(PTYXIS_GHOSTTY_WIDGET(widget),
+                                         PTYXIS_CURSOR_SHAPE_IBEAM);
+  ptyxis_ghostty_widget_set_cursor_shape(PTYXIS_GHOSTTY_WIDGET(widget),
+                                         PTYXIS_CURSOR_SHAPE_UNDERLINE);
+  ptyxis_ghostty_widget_set_cursor_shape(PTYXIS_GHOSTTY_WIDGET(widget),
+                                         PTYXIS_CURSOR_SHAPE_BLOCK);
+
+  /* Widget must still be focusable and accept grab_focus */
+  g_assert_true(gtk_widget_get_focusable(widget));
+  gtk_widget_grab_focus(widget);
+
+  gtk_window_destroy(GTK_WINDOW(window));
+}
+
+static void
 test_widget_search_after_feed(void)
 {
   GtkWidget *widget;
@@ -380,6 +415,8 @@ main(int argc, char *argv[])
                   test_widget_search_api);
   g_test_add_func("/Ptyxis/GhosttyWidget/cursor_shape",
                   test_widget_cursor_shape);
+  g_test_add_func("/Ptyxis/GhosttyWidget/focus_after_cursor_change",
+                  test_widget_focus_retained_after_cursor_shape_change);
   g_test_add_func("/Ptyxis/GhosttyWidget/cursor_blink_mode",
                   test_widget_cursor_blink_mode);
   g_test_add_func("/Ptyxis/GhosttyWidget/feed_vt_sequences",

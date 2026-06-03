@@ -1271,6 +1271,23 @@ ptyxis_window_undo_close_tab_action (GtkWidget  *widget,
 }
 
 static void
+static void
+preferences_window_destroyed_cb (GtkWindow    *prefs_window,
+                                  PtyxisWindow *self)
+{
+  PtyxisTab *active_tab;
+
+  (void)prefs_window;
+
+  /* Restore focus to the terminal after the preferences window closes.
+   * Since preferences is non-modal, GTK4 does not automatically return
+   * keyboard focus to the terminal widget, leaving it unable to receive
+   * input until the user clicks it. */
+  if ((active_tab = ptyxis_window_get_active_tab (self)))
+    ptyxis_tab_grab_focus (active_tab);
+}
+
+static void
 ptyxis_window_preferences_action (GtkWidget  *widget,
                                   const char *action_name,
                                   GVariant   *param)
@@ -1298,6 +1315,9 @@ ptyxis_window_preferences_action (GtkWidget  *widget,
   gtk_application_add_window (GTK_APPLICATION (app), GTK_WINDOW (window));
   gtk_window_set_transient_for (window, GTK_WINDOW (self));
   gtk_window_set_modal (window, FALSE);
+  g_signal_connect_object (window, "destroy",
+                           G_CALLBACK (preferences_window_destroyed_cb),
+                           self, G_CONNECT_DEFAULT);
   gtk_window_present (window);
 }
 

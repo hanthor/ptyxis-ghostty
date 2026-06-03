@@ -1,6 +1,6 @@
 # Project Status — Ptyxis Ghostty
 
-Last updated: 2026-06-03
+Last updated: 2026-06-03 (rev 2)
 
 ## Summary
 
@@ -23,7 +23,7 @@ renderer driven directly by the libghostty-vt cell grid.
 | Font scale (zoom) | ✅ | `Ctrl+Plus/Minus` remaps through real widget call |
 | Window title | ✅ | OSC 0/2 title changes propagate to tab |
 | Background color | ✅ | Window dressing reads real terminal background color |
-| Agent (container) | ✅ | Compiles; agent process monitored via IPC |
+| Agent (container) | ✅ | Agent PTY now wired into widget via attach_pty |
 | Flatpak build (CI) | ✅ | Nightly Flatpak via GitHub Actions |
 | Tests | ✅ | Type registration + widget tests pass |
 | `just` recipes | ✅ | `just toolbox-run` and `just flatpak-dev` for quick iteration |
@@ -45,22 +45,19 @@ GtkSnapshot → gtk_snapshot_append_cairo()
   Cursor: filled block (focused) / hollow rect (unfocused)
 ```
 
-### Known Limitation: dual-process spawning
+### Container PTY wiring
 
-`PtyxisTab::respawn` spawns a shell via the ptyxis-agent (container-aware
-IPC). Our widget also spawns its own shell via `openpty`+`fork` on realize.
-The **widget's shell** is what the user interacts with. The agent shell is
-idle (container monitoring still works for the running state).
-
-Container support (spawning inside podman/toolbox) requires wiring
-`vte_terminal_set_pty` to feed the agent PTY fd into the widget instead
-of calling `start_child`. This is the next major milestone.
+`PtyxisTab::respawn` calls `vte_terminal_set_pty` → `ptyxis_terminal_set_pty`
+→ `ptyxis_ghostty_widget_attach_pty(fd)`. This tears down the widget's
+self-spawned shell, dups the agent's master fd, and sets up the I/O watch.
+`ptyxis_application_spawn_async` then tells the agent to spawn the shell on
+the slave side of that PTY — enabling container-aware spawning (toolbox, podman).
 
 ## What's Not Yet Implemented
 
 | Feature | Status | Notes |
 |---|---|---|
-| Container spawning | ❌ | Widget spawns bare shell; agent PTY not wired up |
+| Container spawning | ✅ | Agent PTY wired via attach_pty; widget reads agent's shell |
 | Text selection | ❌ | `has_selection` / `get_selected_text` stubs |
 | Search | ❌ | `search_start/next/prev/end` stubs |
 | Scrollback navigation | ❌ | Scrollbar not connected |

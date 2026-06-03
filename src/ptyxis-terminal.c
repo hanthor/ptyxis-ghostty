@@ -226,7 +226,13 @@ ptyxis_terminal_update_colors(PtyxisTerminal *self)
     {
       ghostty_config_get(self->config, &fg, "foreground", 10);
       ghostty_config_get(self->config, &bg, "background", 10);
-      /* Palette set via ghostty_surface_update_config */
+      ghostty_config_get(self->config, &palette, "palette", 7);
+      if (self->ghostty != NULL)
+        {
+          ghostty_surface_t surface = ptyxis_ghostty_widget_get_surface(self->ghostty);
+          if (surface != NULL)
+            ghostty_surface_update_config(surface, self->config);
+        }
     }
 }
 

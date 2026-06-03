@@ -177,7 +177,7 @@ managed and providing a consistent experience across Linux distributions.
 ```bash
 # Clone with submodules
 git clone https://github.com/hanthor/ptyxis-ghostty.git
-cd ptyxis-ghostty
+cd ptyxis-ghostty/ptyxis
 git submodule update --init --recursive
 
 # Build libghostty (requires Zig 0.15.2)

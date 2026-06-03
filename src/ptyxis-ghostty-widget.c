@@ -97,13 +97,40 @@ static void ptyxis_ghostty_widget_focus_enter(GtkEventControllerFocus *focus,
 static void ptyxis_ghostty_widget_focus_leave(GtkEventControllerFocus *focus,
                                               GtkWidget *widget);
 
+/* --- GTK main-thread dispatch helpers --- */
+
+typedef struct {
+  PtyxisGhosttyWidget *widget;
+  uint32_t             width;
+  uint32_t             height;
+} GhosttyIdleData;
+
+static gboolean
+ghostty_queue_draw_idle(gpointer user_data)
+{
+  PtyxisGhosttyWidget *self = PTYXIS_GHOSTTY_WIDGET(user_data);
+  gtk_widget_queue_draw(GTK_WIDGET(self));
+  g_object_unref(self);
+  return G_SOURCE_REMOVE;
+}
+
+static gboolean
+ghostty_queue_resize_idle(gpointer user_data)
+{
+  PtyxisGhosttyWidget *self = PTYXIS_GHOSTTY_WIDGET(user_data);
+  gtk_widget_queue_resize(GTK_WIDGET(self));
+  g_object_unref(self);
+  return G_SOURCE_REMOVE;
+}
+
 /* --- Ghostty runtime callbacks --- */
 
 static void
 ghostty_wakeup_cb(void *userdata)
 {
   PtyxisGhosttyWidget *self = PTYXIS_GHOSTTY_WIDGET(userdata);
-  gtk_widget_queue_draw(GTK_WIDGET(self));
+  /* Ghostty may call this from any thread. Marshal to GTK main thread. */
+  g_idle_add(ghostty_queue_draw_idle, g_object_ref(self));
 }
 
 static bool
@@ -118,7 +145,7 @@ ghostty_action_cb(ghostty_app_t app,
 
   if (action.tag == GHOSTTY_ACTION_RENDER)
     {
-      gtk_widget_queue_draw(GTK_WIDGET(self));
+      g_idle_add(ghostty_queue_draw_idle, g_object_ref(self));
       return true;
     }
 
@@ -126,7 +153,7 @@ ghostty_action_cb(ghostty_app_t app,
     {
       self->size.cell_width = action.action.cell_size.width;
       self->size.cell_height = action.action.cell_size.height;
-      gtk_widget_queue_resize(GTK_WIDGET(self));
+      g_idle_add(ghostty_queue_resize_idle, g_object_ref(self));
     }
 
   if (action.tag == GHOSTTY_ACTION_CLOSE_TAB)
@@ -253,6 +280,12 @@ ptyxis_ghostty_widget_finalize(GObject *object)
       self->surface_config = NULL;
     }
 
+  if (self->app != NULL)
+    {
+      ghostty_app_free(self->app);
+      self->app = NULL;
+    }
+
   G_OBJECT_CLASS(ptyxis_ghostty_widget_parent_class)->finalize(object);
 }
 
@@ -288,6 +321,8 @@ ptyxis_ghostty_widget_realize(GtkWidget *widget)
   /* Create the ghostty app if this is the first terminal */
   if (self->app == NULL)
     {
+      if (self->surface_config != NULL)
+        ghostty_config_finalize(self->surface_config);
       self->app = ghostty_app_new(&self->runtime, self->surface_config);
     }
 
@@ -300,7 +335,11 @@ ptyxis_ghostty_widget_realize(GtkWidget *widget)
       sconfig.font_size = 12.0f;
 
       self->surface = ghostty_surface_new(self->app, &sconfig);
-      g_assert(self->surface != NULL);
+      if (self->surface == NULL)
+        {
+          g_critical("Failed to create ghostty surface");
+          return;
+        }
     }
 
   self->realized = TRUE;
@@ -402,7 +441,12 @@ ptyxis_ghostty_widget_unroot(GtkWidget *widget)
 static gboolean
 ptyxis_ghostty_widget_grab_focus(GtkWidget *widget)
 {
-  return gtk_widget_grab_focus(widget);
+  PtyxisGhosttyWidget *self = PTYXIS_GHOSTTY_WIDGET(widget);
+  if (self->surface != NULL)
+    ghostty_surface_set_focus(self->surface, true);
+  self->has_focus = TRUE;
+  gtk_widget_queue_draw(widget);
+  return TRUE;
 }
 
 static void

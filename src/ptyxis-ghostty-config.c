@@ -56,7 +56,6 @@ ptyxis_ghostty_config_from_profile(PtyxisProfile *profile,
   if (profile != NULL)
     {
       val_double = ptyxis_profile_get_opacity(profile);
-      opacity_as_int:;
       int opacity_pct = (int)(val_double * 100.0);
       ghostty_config_get(config, &opacity_pct, "background-opacity", 19);
     }

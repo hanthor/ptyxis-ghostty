@@ -36,6 +36,7 @@ toolbox-build:
 
 # Run the installed binary with correct lib and schema paths
 toolbox-run: toolbox-build
+    glib-compile-schemas '{{prefix_dir}}/share/glib-2.0/schemas'
     LD_LIBRARY_PATH="{{ghostty_lib}}" \
     XDG_DATA_DIRS="{{prefix_dir}}/share:$XDG_DATA_DIRS" \
     GSETTINGS_SCHEMA_DIR="{{prefix_dir}}/share/glib-2.0/schemas" \

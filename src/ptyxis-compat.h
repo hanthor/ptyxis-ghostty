@@ -15,10 +15,11 @@ static inline void vte_regex_free(VteRegex *r) { g_free(r); }
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(VteRegex, vte_regex_free)
 
 /* Stub for VtePty - PTY lifecycle managed by ghostty.
- * Defined as an opaque GObject type so g_autoptr works. */
+ * Defined as an opaque GObject type so g_autoptr works.
+ * Stores the raw PTY master FD for container integration. */
 #define VTE_TYPE_PTY (0)
-typedef struct _VtePty { int dummy; } VtePty;
-static inline void vte_pty_free(VtePty *p) { g_free(p); }
+typedef struct _VtePty { int fd; } VtePty;
+static inline void vte_pty_free(VtePty *p) { if (p) { if (p->fd >= 0) close(p->fd); g_free(p); } }
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(VtePty, vte_pty_free)
 
 /* Stub for VteEventContext */
@@ -248,15 +249,33 @@ vte_terminal_set_word_char_exceptions(void *t, const char *exceptions) { (void)t
 static inline void
 vte_terminal_set_clear_background(void *t, gboolean clear) { (void)t; (void)clear; }
 
-/* VTE Pty stubs */
+/* VTE Pty stubs — real FD storage for container integration */
+
 static inline void *
-vte_pty_new_foreign_sync(int fd, void *cancellable, void **error) { (void)fd; (void)cancellable; (void)error; return (void*)1; }
+vte_pty_new_foreign_sync(int fd, void *cancellable, void **error)
+{
+  (void)cancellable;
+  if (error) *error = NULL;
+  if (fd < 0) return NULL;
+  VtePty *pty = g_new0(VtePty, 1);
+  pty->fd = fd;
+  return pty;
+}
 
 static inline int
-vte_pty_get_fd(void *pty) { (void)pty; return -1; }
+vte_pty_get_fd(void *pty_ptr)
+{
+  VtePty *pty = (VtePty *)pty_ptr;
+  if (pty == NULL) return -1;
+  return pty->fd;
+}
 
 static inline void
-vte_pty_set_utf8(void *pty, gboolean utf8, void **error) { (void)pty; (void)utf8; (void)error; }
+vte_pty_set_utf8(void *pty_ptr, gboolean utf8, void **error)
+{
+  (void)pty_ptr; (void)utf8;
+  if (error) *error = NULL;
+}
 
 /* VTE regex stubs */
 static inline VteRegex *

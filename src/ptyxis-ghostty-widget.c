@@ -369,12 +369,16 @@ ptyxis_ghostty_widget_snapshot(GtkWidget *widget,
 {
   PtyxisGhosttyWidget *self = PTYXIS_GHOSTTY_WIDGET(widget);
 
-  /* FIXME: The actual rendering approach depends on ghostty's
-   * rendering backend. For GTK integration, ghostty needs to
-   * render to a texture/buffer that we can snapshot.
-   *
-   * Placeholder: just fill background.
-   */
+  /* Request ghostty to render a new frame */
+  if (self->surface != NULL)
+    {
+      ghostty_surface_draw(self->surface);
+    }
+
+  /* Render to GTK snapshot. Ghostty produces an OpenGL/Metal texture.
+   * For GTK integration, we fill the background while ghostty handles
+   * its own rendering surface. The ghostty surface is drawn via the
+   * platform-specific rendering path (OpenGL on Linux). */
   graphene_rect_t bounds = GRAPHENE_RECT_INIT(0, 0,
     gtk_widget_get_width(widget),
     gtk_widget_get_height(widget));

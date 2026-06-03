@@ -532,7 +532,7 @@ ptyxis_client_create_pty (PtyxisClient  *self,
     return NULL;
 
   pty = g_new0(VtePty, 1);
-  pty->dummy = fd;
+  pty->fd = fd;
   /* fd is now owned by pty; don't close it here */
 
   return g_steal_pointer (&pty);

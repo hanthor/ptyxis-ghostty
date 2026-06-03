@@ -51,9 +51,9 @@ toolbox-test: toolbox-build
 
 # ── Flatpak ───────────────────────────────────────────────────────────────────
 
-# Build the Flatpak (local, no network after first run if deps are cached)
+# Build the Flatpak using the org.flatpak.Builder flatpak (flatpak-builder is not in PATH)
 flatpak-build:
-    flatpak-builder \
+    flatpak run org.flatpak.Builder \
         --force-clean \
         --user \
         --install-deps-from=gnome-nightly \

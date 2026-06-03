@@ -28,9 +28,14 @@ container_tests = {
   'test-container-flow' : {},
 }
 
-# Widget tests (link against ghostty)
+# Widget tests (link against ghostty, need widget source)
 widget_tests = {
   'test-ghostty-widget' : {'sources': []},
+}
+
+# Ghostty API tests (link against ghostty, no widget source needed)
+ghostty_api_tests = {
+  'test-ghostty-config' : {'sources': []},
 }
 
 # --- Agent tests ---
@@ -77,6 +82,26 @@ foreach test, params: widget_tests
   test_exe = executable(test,
     ['@0@.c'.format(test), '../src/ptyxis-ghostty-widget.c'] + extra,
                  c_args: testsuite_c_args + ['-DGHOSTTY_STATIC', '-DGHOSTTY_TEST_BUILD', '-Wno-error=strict-prototypes'],
+           dependencies: widget_test_deps,
+          link_args: ptyxis_link_args,
+    include_directories: [
+      include_directories('..'),
+      include_directories('.'),
+      include_directories('../src'),
+      include_directories(ghty_vt_include),
+    ],
+  )
+  if not params.get('skip', false)
+    test(test, test_exe, env: test_env)
+  endif
+endforeach
+
+# --- Ghostty API tests ---
+foreach test, params: ghostty_api_tests
+  extra = params.get('sources', [])
+  test_exe = executable(test,
+    ['@0@.c'.format(test)] + extra,
+                 c_args: testsuite_c_args + ['-DGHOSTTY_STATIC', '-Wno-error=strict-prototypes'],
            dependencies: widget_test_deps,
           link_args: ptyxis_link_args,
     include_directories: [

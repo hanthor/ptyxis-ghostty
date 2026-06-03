@@ -53,11 +53,14 @@ jobs:
               meson gcc gettext desktop-file-utils appstream \
               glib2-devel gtk4-devel libadwaita-devel \
               json-glib-devel git pkgconf-pkg-config libportal-gtk4-devel \
-              libxml2-devel mesa-dri-drivers xorg-x11-server-Xvfb &&
+              libxml2-devel mesa-dri-drivers xorg-x11-server-Xvfb dbus-daemon &&
+            # D-Bus and ghostty require a machine-id to be present
+            echo "ffffffffffffffffffffffffffffffff" > /etc/machine-id &&
+            dbus-uuidgen --ensure &&
             meson setup builddir \
               -Dghostty_prefix=/ghostty \
               -Dlibc-compat=true \
               -Ddevelopment=true &&
             meson compile -C builddir &&
-            xvfb-run -a meson test -C builddir --print-errorlogs
+            xvfb-run -a dbus-run-session -- meson test -C builddir --print-errorlogs
             '

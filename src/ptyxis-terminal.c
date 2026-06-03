@@ -1106,3 +1106,72 @@ ptyxis_terminal_dup_current_directory_uri(PtyxisTerminal *self)
   /* TODO: Track CWD via ghostty PWD action callback */
   return NULL;
 }
+
+/* --- VTE compat delegates ---- */
+
+void
+ptyxis_terminal_set_font_scale(PtyxisTerminal *self, double scale)
+{
+  g_return_if_fail(PTYXIS_IS_TERMINAL(self));
+  if (self->ghostty != NULL)
+    ptyxis_ghostty_widget_set_font_scale(self->ghostty, scale);
+}
+
+double
+ptyxis_terminal_get_font_scale(PtyxisTerminal *self)
+{
+  g_return_val_if_fail(PTYXIS_IS_TERMINAL(self), 1.0);
+  if (self->ghostty != NULL)
+    {
+      double scale = 1.0;
+      g_object_get(self->ghostty, "font-scale", &scale, NULL);
+      return scale;
+    }
+  return 1.0;
+}
+
+void
+ptyxis_terminal_feed(PtyxisTerminal *self, const char *data, gssize length)
+{
+  g_return_if_fail(PTYXIS_IS_TERMINAL(self));
+  if (self->ghostty != NULL && data != NULL)
+    ptyxis_ghostty_widget_feed(self->ghostty, data,
+                               length < 0 ? (gsize)strlen(data) : (gsize)length);
+}
+
+char *
+ptyxis_terminal_get_window_title(PtyxisTerminal *self)
+{
+  g_return_val_if_fail(PTYXIS_IS_TERMINAL(self), NULL);
+  if (self->ghostty != NULL)
+    return ptyxis_ghostty_widget_get_window_title(self->ghostty);
+  return NULL;
+}
+
+void
+ptyxis_terminal_get_background_rgba(PtyxisTerminal *self, GdkRGBA *out_color)
+{
+  g_return_if_fail(PTYXIS_IS_TERMINAL(self));
+  g_return_if_fail(out_color != NULL);
+  if (self->ghostty != NULL)
+    ptyxis_ghostty_widget_get_background_rgba(self->ghostty, out_color);
+  else
+    *out_color = (GdkRGBA){0, 0, 0, 1};
+}
+
+void
+ptyxis_terminal_set_input_enabled(PtyxisTerminal *self, gboolean enabled)
+{
+  g_return_if_fail(PTYXIS_IS_TERMINAL(self));
+  if (self->ghostty != NULL)
+    ptyxis_ghostty_widget_set_input_enabled(self->ghostty, enabled);
+}
+
+gboolean
+ptyxis_terminal_get_input_enabled(PtyxisTerminal *self)
+{
+  g_return_val_if_fail(PTYXIS_IS_TERMINAL(self), TRUE);
+  if (self->ghostty != NULL)
+    return ptyxis_ghostty_widget_get_input_enabled(self->ghostty);
+  return TRUE;
+}

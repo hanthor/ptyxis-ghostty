@@ -1169,6 +1169,46 @@ ptyxis_ghostty_widget_set_font_scale(PtyxisGhosttyWidget *self,
 }
 
 void
+ptyxis_ghostty_widget_feed(PtyxisGhosttyWidget *self,
+                            const char          *data,
+                            gsize                length)
+{
+  g_return_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self));
+  if (data == NULL || length == 0)
+    return;
+  ghostty_terminal_vt_write(self->terminal, (const uint8_t *)data, length);
+  ghostty_render_state_update(self->render_state, self->terminal);
+  gtk_widget_queue_draw(GTK_WIDGET(self));
+}
+
+void
+ptyxis_ghostty_widget_get_background_rgba(PtyxisGhosttyWidget *self,
+                                           GdkRGBA             *out_color)
+{
+  g_return_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self));
+  g_return_if_fail(out_color != NULL);
+  GhosttyRenderStateColors colors = GHOSTTY_INIT_SIZED(GhosttyRenderStateColors);
+  ghostty_render_state_colors_get(self->render_state, &colors);
+  *out_color = color_rgb_to_rgba(colors.background);
+}
+
+void
+ptyxis_ghostty_widget_set_input_enabled(PtyxisGhosttyWidget *self,
+                                         gboolean             enabled)
+{
+  g_return_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self));
+  /* TODO: block key/mouse event delivery when !enabled */
+  (void)enabled;
+}
+
+gboolean
+ptyxis_ghostty_widget_get_input_enabled(PtyxisGhosttyWidget *self)
+{
+  g_return_val_if_fail(PTYXIS_IS_GHOSTTY_WIDGET(self), TRUE);
+  return TRUE;
+}
+
+void
 ptyxis_ghostty_widget_search_start(PtyxisGhosttyWidget *self,
                                     const char          *needle)
 {

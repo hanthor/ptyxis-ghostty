@@ -44,6 +44,17 @@ void                 ptyxis_ghostty_widget_paste         (PtyxisGhosttyWidget *s
 void                 ptyxis_ghostty_widget_set_font_scale(PtyxisGhosttyWidget *self,
                                                           double               scale);
 
+void                 ptyxis_ghostty_widget_feed           (PtyxisGhosttyWidget *self,
+                                                           const char          *data,
+                                                           gsize                length);
+
+void                 ptyxis_ghostty_widget_get_background_rgba(PtyxisGhosttyWidget *self,
+                                                               GdkRGBA             *out_color);
+
+void                 ptyxis_ghostty_widget_set_input_enabled (PtyxisGhosttyWidget *self,
+                                                              gboolean             enabled);
+gboolean             ptyxis_ghostty_widget_get_input_enabled (PtyxisGhosttyWidget *self);
+
 void                 ptyxis_ghostty_widget_search_start   (PtyxisGhosttyWidget *self,
                                                            const char          *needle);
 void                 ptyxis_ghostty_widget_search_next    (PtyxisGhosttyWidget *self);

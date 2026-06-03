@@ -146,7 +146,11 @@ static inline void
 vte_terminal_set_color_cursor_foreground(void *t, void *color) { (void)t; (void)color; }
 
 static inline void
-vte_terminal_feed(void *t, const char *data, int len) { (void)t; (void)data; (void)len; }
+vte_terminal_feed(void *t, const char *data, int len)
+{
+  if (t && PTYXIS_IS_TERMINAL(t))
+    ptyxis_terminal_feed(PTYXIS_TERMINAL(t), data, len < 0 ? -1 : (gssize)len);
+}
 
 static inline void
 vte_terminal_set_pty(void *t, void *pty) { (void)t; (void)pty; }
@@ -158,10 +162,19 @@ static inline void
 vte_terminal_set_size(void *t, int cols, int rows) { (void)t; (void)cols; (void)rows; }
 
 static inline void
-vte_terminal_set_input_enabled(void *t, gboolean enabled) { (void)t; (void)enabled; }
+vte_terminal_set_input_enabled(void *t, gboolean enabled)
+{
+  if (t && PTYXIS_IS_TERMINAL(t))
+    ptyxis_terminal_set_input_enabled(PTYXIS_TERMINAL(t), enabled);
+}
 
 static inline gboolean
-vte_terminal_get_input_enabled(void *t) { (void)t; return TRUE; }
+vte_terminal_get_input_enabled(void *t)
+{
+  if (t && PTYXIS_IS_TERMINAL(t))
+    return ptyxis_terminal_get_input_enabled(PTYXIS_TERMINAL(t));
+  return TRUE;
+}
 
 static inline void
 vte_terminal_set_scrollback_lines(void *t, int lines) { (void)t; (void)lines; }
@@ -188,10 +201,19 @@ static inline void
 vte_terminal_paste_clipboard(void *t) { (void)t; }
 
 static inline char *
-vte_terminal_get_window_title(void *t) { (void)t; return NULL; }
+vte_terminal_get_window_title(void *t)
+{
+  if (t && PTYXIS_IS_TERMINAL(t))
+    return ptyxis_terminal_get_window_title(PTYXIS_TERMINAL(t));
+  return NULL;
+}
 
 static inline void
-vte_terminal_set_font_scale(void *t, double scale) { (void)t; (void)scale; }
+vte_terminal_set_font_scale(void *t, double scale)
+{
+  if (t && PTYXIS_IS_TERMINAL(t))
+    ptyxis_terminal_set_font_scale(PTYXIS_TERMINAL(t), scale);
+}
 
 static inline void
 vte_terminal_get_cursor_position(void *t, long *col, long *row) { (void)t; if(col) *col=0; if(row) *row=0; }
@@ -203,7 +225,13 @@ static inline void
 vte_terminal_set_cell_height_scale(void *t, double scale) { (void)t; (void)scale; }
 
 static inline void
-vte_terminal_get_color_background_for_draw(void *t, void *color) { (void)t; (void)color; }
+vte_terminal_get_color_background_for_draw(void *t, void *color)
+{
+  if (t && PTYXIS_IS_TERMINAL(t) && color)
+    ptyxis_terminal_get_background_rgba(PTYXIS_TERMINAL(t), (GdkRGBA *)color);
+  else if (color)
+    *(GdkRGBA *)color = (GdkRGBA){0, 0, 0, 1};
+}
 
 static inline gboolean
 vte_terminal_get_scroll_on_keystroke(void *t) { (void)t; return TRUE; }

@@ -41,4 +41,16 @@ void            ptyxis_terminal_set_custom_link     (PtyxisTerminal  *self,
                                                      const char      *replace,
                                                      const char      *cursor_name);
 
+/* Called from VTE compat stubs */
+void            ptyxis_terminal_set_font_scale      (PtyxisTerminal *self, double scale);
+double          ptyxis_terminal_get_font_scale      (PtyxisTerminal *self);
+void            ptyxis_terminal_feed                (PtyxisTerminal *self,
+                                                     const char     *data,
+                                                     gssize          length);
+char           *ptyxis_terminal_get_window_title    (PtyxisTerminal *self);
+void            ptyxis_terminal_get_background_rgba (PtyxisTerminal *self,
+                                                     GdkRGBA        *out_color);
+void            ptyxis_terminal_set_input_enabled   (PtyxisTerminal *self, gboolean enabled);
+gboolean        ptyxis_terminal_get_input_enabled   (PtyxisTerminal *self);
+
 G_END_DECLS

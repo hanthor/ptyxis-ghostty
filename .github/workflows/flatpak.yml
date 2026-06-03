@@ -56,6 +56,11 @@ jobs:
           name: ghostty-build
           path: ghostty-build
 
+      - name: Verify ghostty files
+        run: |
+          ls -la ghostty-build/
+          file ghostty-build/libghostty.so
+
       - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           bundle: PtyxisGhostty.flatpak

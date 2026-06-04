@@ -27,7 +27,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
 
     env:
-      BASE_IMAGE: ghcr.io/projectbluefin/base-main:latest
+      BASE_IMAGE: quay.io/fedora/fedora-silverblue:43
       RUNNER_IMAGE: ghcr.io/projectbluefin/testsuite:runner
       SSH_COMMON: >-
         -i /tmp/vm_key

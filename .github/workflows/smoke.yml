@@ -353,6 +353,7 @@ jobs:
             podman run --rm \
               --pid=host \
               --privileged \
+              --user 1001:1001 \
               --network host \
               -v /run/user/1001:/run/user/1001 \
               -v /dev/uinput:/dev/uinput \

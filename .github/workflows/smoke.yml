@@ -1,0 +1,393 @@
+# Smoke Tests — GNOME AT-SPI GUI tests in KVM-accelerated QEMU
+#
+# Boots ghcr.io/projectbluefin/base-main in a QEMU VM on ubuntu-latest,
+# installs the PtyxisGhostty Flatpak artifact from the Flatpak CI run, then
+# runs the dogtail/behave/qecore smoke suite against the live GNOME session.
+#
+# No self-hosted runners. Uses KVM (available on ubuntu-latest) + the
+# pre-built ghcr.io/projectbluefin/testsuite:runner container that has
+# qecore, behave, dogtail, and the ponytail Python module already installed.
+#
+# Technique credit: projectbluefin/testsuite e2e.yml
+
+name: Smoke Tests
+
+on:
+  workflow_run:
+    workflows: ["Flatpak CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: GNOME 50 smoke — Ptyxis Ghostty
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+
+    env:
+      BASE_IMAGE: ghcr.io/projectbluefin/base-main:latest
+      RUNNER_IMAGE: ghcr.io/projectbluefin/testsuite:runner
+      SSH_COMMON: >-
+        -i /tmp/vm_key
+        -o StrictHostKeyChecking=no
+        -o UserKnownHostsFile=/dev/null
+        -o BatchMode=yes
+        -o ControlMaster=auto
+        -o ControlPersist=600
+        -o ControlPath=/tmp/ssh-ctrl-%C
+        -o ConnectTimeout=3
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      # Download the .flatpak artifact from the triggering Flatpak CI run.
+      # On workflow_dispatch (manual trigger) we fall back to the latest
+      # successful run so the workflow is still useful for ad-hoc testing.
+      - name: Download Flatpak artifact (from triggering run)
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: PtyxisGhostty
+          path: /tmp/flatpak-artifact
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download Flatpak artifact (latest, for workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh run download \
+            --repo "${{ github.repository }}" \
+            --name PtyxisGhostty \
+            --dir /tmp/flatpak-artifact \
+            $(gh run list --repo "${{ github.repository }}" \
+                --workflow flatpak.yml \
+                --status success \
+                --limit 1 \
+                --json databaseId \
+                --jq '.[0].databaseId')
+
+      - name: Enable KVM access
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | \
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+          ls -la /dev/kvm
+
+      - name: Install QEMU + pull images in parallel
+        run: |
+          sudo podman pull "${BASE_IMAGE}" &
+          PULL_PID=$!
+          sudo podman pull "${RUNNER_IMAGE}" &
+          RUNNER_PID=$!
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends qemu-system-x86
+          wait $PULL_PID
+          wait $RUNNER_PID
+
+      - name: Generate SSH keypair
+        run: ssh-keygen -t ed25519 -f /tmp/vm_key -N "" -C "smoke@gha"
+
+      - name: Install OCI image to disk and configure for CI
+        run: |
+          IMAGE="${BASE_IMAGE}"
+          BFT_UID=1001
+          fallocate -l 30G disk.raw
+
+          BOOTLOADER_FLAG=""
+          if sudo podman run --rm --quiet "${IMAGE}" bootc install to-disk --help 2>&1 | grep -q "\-\-bootloader"; then
+            BOOTLOADER_FLAG="--bootloader systemd"
+          fi
+
+          sudo podman run \
+            --rm --privileged --pid=host \
+            --security-opt label=type:unconfined_t \
+            -v /var/lib/containers:/var/lib/containers \
+            -v /dev:/dev \
+            -v "$(pwd):/data" \
+            "${IMAGE}" bootc install to-disk \
+              --via-loopback /data/disk.raw \
+              --filesystem ext4 \
+              --wipe \
+              ${BOOTLOADER_FLAG} \
+            || echo "bootc install exited $? (bootupd expected — continuing)"
+
+          LOOP=$(sudo losetup -f --show -P disk.raw)
+          ROOT_PART="${LOOP}p3"
+          ROOT_UUID=$(sudo blkid -s UUID -o value "${ROOT_PART}")
+          sudo mkdir -p /mnt/root
+          sudo mount "${ROOT_PART}" /mnt/root
+
+          DEPLOY=$(sudo ls /mnt/root/ostree/deploy/default/deploy/ 2>/dev/null | head -1)
+          D="/mnt/root/ostree/deploy/default/deploy/${DEPLOY}"
+          VAR="/mnt/root/ostree/deploy/default/var"
+
+          KVER=""
+          for kv in $(ls "${D}/usr/lib/modules/" | sort -V); do
+            [[ -f "${D}/usr/lib/modules/${kv}/vmlinuz" ]] && KVER="${kv}"
+          done
+          [[ -z "${KVER}" ]] && KVER=$(ls "${D}/usr/lib/modules/" | sort -V | tail -1)
+          sudo cp "${D}/usr/lib/modules/${KVER}/vmlinuz" ./vmlinuz
+          sudo cp "${D}/usr/lib/modules/${KVER}/initramfs.img" ./initramfs.img
+          sudo chown runner:runner ./vmlinuz ./initramfs.img
+
+          BOOT_ENTRY=$(sudo find /mnt/root/ostree -maxdepth 4 -type l -name '0' 2>/dev/null \
+            | grep -E '/boot\.[0-9]' | grep '/default/' | head -1)
+          if [[ -z "${BOOT_ENTRY}" ]]; then
+            DEPLOY_HASH="${DEPLOY%.*}"
+            DEPLOY_SERIAL="${DEPLOY##*.}"
+            BOOT_DIR="/mnt/root/ostree/boot.0/default/${DEPLOY_HASH}"
+            sudo mkdir -p "${BOOT_DIR}"
+            sudo ln -sfT "../../../deploy/default/deploy/${DEPLOY}" "${BOOT_DIR}/${DEPLOY_SERIAL}"
+            BOOT_ENTRY="${BOOT_DIR}/${DEPLOY_SERIAL}"
+          fi
+          OSTREE_PATH="${BOOT_ENTRY#/mnt/root}"
+
+          if [[ "${OSTREE_PATH}" =~ /ostree/(boot\.[0-9]+)\.[0-9]+ ]]; then
+            VERSIONED_NAME=$(echo "${OSTREE_PATH}" | grep -oE 'boot\.[0-9]+\.[0-9]+')
+            CANONICAL_NAME="${BASH_REMATCH[1]}"
+            CANONICAL_ABS="/mnt/root/ostree/${CANONICAL_NAME}"
+            [[ ! -e "${CANONICAL_ABS}" ]] && sudo ln -s "${VERSIONED_NAME}" "${CANONICAL_ABS}"
+            OSTREE_PATH="${OSTREE_PATH/${VERSIONED_NAME}/${CANONICAL_NAME}}"
+          fi
+
+          KERNEL_ARGS="root=UUID=${ROOT_UUID} rw ostree=${OSTREE_PATH} systemd.firstboot=no selinux=0 console=ttyS0,115200 systemd.journald.forward_to_console=1 systemd.mask=NetworkManager-wait-online.service systemd.mask=flatpak-preinstall.service systemd.mask=podman-auto-update.service systemd.mask=podman-auto-update.timer systemd.mask=speech-dispatcherd.service systemd.mask=avahi-daemon.service systemd.mask=avahi-daemon.socket systemd.mask=cups.service systemd.mask=cups.path systemd.mask=cups.socket systemd.mask=blueman-mechanism.service systemd.mask=gnome-remote-desktop.service"
+          echo "ROOT_UUID=${ROOT_UUID}" >> "$GITHUB_ENV"
+          echo "KVER=${KVER}"          >> "$GITHUB_ENV"
+          echo "KERNEL_ARGS=${KERNEL_ARGS}" >> "$GITHUB_ENV"
+
+          for DEP in $(sudo find /mnt/root/ostree/deploy/default/deploy -maxdepth 1 -mindepth 1 -type d 2>/dev/null); do
+            sudo mkdir -p "${DEP}/etc/systemd/system/multi-user.target.wants/"
+            sudo ln -sf /usr/lib/systemd/system/sshd.service \
+              "${DEP}/etc/systemd/system/multi-user.target.wants/sshd.service"
+            sudo ssh-keygen -A -f "${DEP}" 2>/dev/null || true
+            grep -q '^bluefin-test:' "${DEP}/etc/passwd" 2>/dev/null || \
+              printf 'bluefin-test:x:%d:%d:Smoke Test:/var/home/bluefin-test:/bin/bash\n' \
+                "${BFT_UID}" "${BFT_UID}" | sudo tee -a "${DEP}/etc/passwd"
+            grep -q '^bluefin-test:' "${DEP}/etc/shadow" 2>/dev/null || \
+              printf 'bluefin-test:*:19000:0:99999:7:::\n' | sudo tee -a "${DEP}/etc/shadow"
+            grep -q '^bluefin-test:' "${DEP}/etc/group"  2>/dev/null || \
+              printf 'bluefin-test:x:%d:\n' "${BFT_UID}" | sudo tee -a "${DEP}/etc/group"
+            sudo mkdir -p "${DEP}/etc/ssh/sshd_config.d/"
+            printf 'PubkeyAuthentication yes\nPermitUserEnvironment yes\nAuthorizedKeysCommand /bin/cat /etc/ssh/ci-authorized-keys\nAuthorizedKeysCommandUser root\n' | \
+              sudo tee "${DEP}/etc/ssh/sshd_config.d/00-ci-auth.conf"
+            sudo mkdir -p "${DEP}/etc/tmpfiles.d/"
+            printf 'Z /var/home/bluefin-test 0700 %d %d -\nd /var/home/bluefin-test 0700 %d %d -\nd /var/home/bluefin-test/.ssh 0700 %d %d -\n' \
+              "${BFT_UID}" "${BFT_UID}" "${BFT_UID}" "${BFT_UID}" "${BFT_UID}" "${BFT_UID}" | \
+              sudo tee "${DEP}/etc/tmpfiles.d/ci-user.conf"
+            printf 'bluefin-test ALL=(ALL) NOPASSWD:ALL\n' | sudo tee "${DEP}/etc/sudoers.d/bluefin-test"
+            sudo chmod 440 "${DEP}/etc/sudoers.d/bluefin-test"
+            sudo mkdir -p "${DEP}/etc/gdm"
+            printf '[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin=bluefin-test\n' | \
+              sudo tee "${DEP}/etc/gdm/custom.conf"
+            sudo cp /tmp/vm_key.pub "${DEP}/etc/ssh/ci-authorized-keys"
+            sudo chmod 644 "${DEP}/etc/ssh/ci-authorized-keys"
+          done
+
+          sudo mkdir -p "${VAR}/home/bluefin-test/.ssh" "${VAR}/home/bluefin-test/.config/environment.d"
+          sudo tee "${VAR}/home/bluefin-test/.ssh/authorized_keys" < /tmp/vm_key.pub
+          sudo touch "${VAR}/home/bluefin-test/.config/no-show-user-motd"
+          printf 'PATH=/var/home/bluefin-test/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin\n' | \
+            sudo tee "${VAR}/home/bluefin-test/.config/environment.d/99-ci-path.conf"
+          sudo chown -R "${BFT_UID}:${BFT_UID}" "${VAR}/home/bluefin-test"
+          sudo chmod 700 "${VAR}/home/bluefin-test/.ssh"
+          sudo chmod 600 "${VAR}/home/bluefin-test/.ssh/authorized_keys"
+
+          sudo umount /mnt/root
+          sudo losetup -d "${LOOP}"
+          sudo podman rmi "${IMAGE}" 2>/dev/null || true
+          ls -lh disk.raw vmlinuz initramfs.img
+
+      - name: Boot VM with QEMU + KVM
+        run: |
+          touch "$(pwd)/vm-serial.log"; chmod 666 "$(pwd)/vm-serial.log"
+          sudo qemu-system-x86_64 \
+            -machine  q35,accel=kvm \
+            -cpu      host \
+            -m        4096 \
+            -smp      4 \
+            -kernel   ./vmlinuz \
+            -initrd   ./initramfs.img \
+            -append   "${KERNEL_ARGS}" \
+            -object   iothread,id=ioth0 \
+            -drive    if=none,id=disk,file=disk.raw,format=raw,cache=unsafe,aio=threads,discard=unmap \
+            -device   virtio-blk-pci,drive=disk,iothread=ioth0 \
+            -netdev   user,id=net0,hostfwd=tcp::2222-:22 \
+            -device   virtio-net-pci,netdev=net0 \
+            -device   virtio-gpu-pci \
+            -display  none \
+            -serial   file:$(pwd)/vm-serial.log \
+            -daemonize \
+            -pidfile  /tmp/qemu.pid
+          echo "VM booting (pid=$(sudo cat /tmp/qemu.pid))"
+
+      - name: Wait for SSH
+        run: |
+          DEADLINE=$((SECONDS + 900))
+          while [ $SECONDS -lt $DEADLINE ]; do
+            ssh ${SSH_COMMON} -p 2222 bluefin-test@127.0.0.1 "echo up" 2>/dev/null && \
+              echo "SSH ready after ${SECONDS}s" && exit 0
+            sleep 3
+          done
+          echo "ERROR: SSH timeout"
+          tail -100 vm-serial.log 2>/dev/null || true
+          exit 1
+
+      - name: Wait for GNOME session
+        run: |
+          SSH="ssh ${SSH_COMMON} -p 2222 bluefin-test@127.0.0.1"
+          DEADLINE=$((SECONDS + 180))
+          while [ $SECONDS -lt $DEADLINE ]; do
+            $SSH "test -S /run/user/1001/wayland-0" 2>/dev/null && \
+              echo "GNOME session active after ${SECONDS}s" && exit 0
+            sleep 3
+          done
+          echo "ERROR: GNOME session timeout"
+          $SSH "journalctl -u gdm --no-pager -n 50" 2>/dev/null || true
+          exit 1
+
+      - name: Capture session environment
+        run: |
+          SSH="ssh ${SSH_COMMON} -p 2222 bluefin-test@127.0.0.1"
+          $SSH "
+            XDG=/run/user/1001
+            SESSION_BUS=\$(systemctl --user show-environment 2>/dev/null \
+              | grep '^DBUS_SESSION_BUS_ADDRESS=' | head -1 | cut -d= -f2-)
+            [[ -z \"\${SESSION_BUS}\" ]] && SESSION_BUS=\"unix:path=\${XDG}/bus\"
+            WAYLAND_DISP=\$(ls /run/user/1001/wayland-* 2>/dev/null \
+              | head -1 | xargs basename 2>/dev/null || echo wayland-0)
+            printf 'export DBUS_SESSION_BUS_ADDRESS=%s\nexport WAYLAND_DISPLAY=%s\nexport XDG_RUNTIME_DIR=%s\nexport AT_SPI_BUS_ADDRESS=%s\n' \
+              \"\${SESSION_BUS}\" \"\${WAYLAND_DISP}\" \"\${XDG}\" \"\${SESSION_BUS}\" \
+              > /tmp/session.env
+            cat /tmp/session.env
+          "
+
+      - name: Load runner container into VM
+        run: |
+          SSH="ssh ${SSH_COMMON} -p 2222 bluefin-test@127.0.0.1"
+          $SSH "sudo bash -c 'grep -q bluefin-test /etc/subuid || echo \"bluefin-test:100000:65536\" >> /etc/subuid; grep -q bluefin-test /etc/subgid || echo \"bluefin-test:100000:65536\" >> /etc/subgid'"
+          $SSH "podman system migrate 2>/dev/null || true"
+          sudo podman save "${RUNNER_IMAGE}" | $SSH "podman load"
+          echo "Runner container loaded"
+
+      - name: Install gnome-ponytail-daemon
+        run: |
+          SSH="ssh ${SSH_COMMON} -p 2222 bluefin-test@127.0.0.1"
+          SCP="scp -i /tmp/vm_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ControlPath=/tmp/ssh-ctrl-%C -P 2222"
+
+          mkdir -p /tmp/ponytail-build
+          podman run --rm -v /tmp/ponytail-build:/out:Z debian:bookworm bash -c "
+            set -e
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -qq
+            apt-get install -y -qq build-essential meson ninja-build pkg-config libglib2.0-dev git
+            git clone --quiet --depth 1 --branch 0.0.11 \
+              https://gitlab.gnome.org/ofourdan/gnome-ponytail-daemon.git /src
+            sed -i \"s/dependency('systemd')/dependency('systemd', required: false)/\" /src/meson.build
+            meson setup /src/build /src --prefix=/usr \
+              -Dsystemd_user_unit_dir=/usr/lib/systemd/user -Dponytail_python=false
+            ninja -C /src/build
+            cp /src/build/src/gnome-ponytail-daemon /out/
+          "
+          $SSH "mkdir -p \$HOME/.local/libexec"
+          ${SCP} /tmp/ponytail-build/gnome-ponytail-daemon \
+            bluefin-test@127.0.0.1:/home/bluefin-test/.local/libexec/gnome-ponytail-daemon
+
+          $SSH "
+            set -e
+            chmod +x \$HOME/.local/libexec/gnome-ponytail-daemon
+            mkdir -p \$HOME/.local/share/dbus-1/services
+            printf '[D-BUS Service]\nName=org.gnome.Ponytail\nExec=%s/.local/libexec/gnome-ponytail-daemon\n' \
+              \"\$HOME\" > \$HOME/.local/share/dbus-1/services/org.gnome.Ponytail.service
+            source /tmp/session.env
+            nohup \$HOME/.local/libexec/gnome-ponytail-daemon >/tmp/ponytail.log 2>&1 &
+            for i in \$(seq 1 15); do
+              dbus-send --session --print-reply --dest=org.freedesktop.DBus \
+                /org/freedesktop/DBus org.freedesktop.DBus.NameHasOwner \
+                string:org.gnome.Ponytail 2>/dev/null | grep -q 'boolean true' \
+                && echo 'gnome-ponytail-daemon ready' && break
+              sleep 1
+            done
+          "
+          $SSH "sudo modprobe uinput 2>/dev/null || true; sudo chmod 0666 /dev/uinput 2>/dev/null || true"
+
+      - name: Install Ptyxis Ghostty Flatpak
+        run: |
+          SSH="ssh ${SSH_COMMON} -p 2222 bluefin-test@127.0.0.1"
+          SCP="scp -i /tmp/vm_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ControlPath=/tmp/ssh-ctrl-%C -P 2222"
+
+          ${SCP} /tmp/flatpak-artifact/PtyxisGhostty.flatpak \
+            bluefin-test@127.0.0.1:/tmp/PtyxisGhostty.flatpak
+
+          $SSH "
+            set -e
+            # Ensure Flathub remote is present for the runtime dependency
+            flatpak remote-add --if-not-exists --user flathub \
+              https://dl.flathub.org/repo/flathub.flatpakrepo 2>/dev/null || true
+            # Install GNOME 50 runtime (required by our Flatpak)
+            flatpak install --noninteractive --user flathub org.gnome.Platform//50 \
+              org.gnome.Sdk//50 2>/dev/null || \
+            flatpak install --noninteractive --user flathub org.gnome.Platform//50 || true
+            # Install our Flatpak from the artifact
+            flatpak install --user --noninteractive /tmp/PtyxisGhostty.flatpak
+            echo 'Installed:' && flatpak list --user --app
+          "
+
+      - name: Run smoke tests
+        id: smoke
+        run: |
+          SSH="ssh ${SSH_COMMON} -p 2222 bluefin-test@127.0.0.1"
+          SCP="scp -i /tmp/vm_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ControlPath=/tmp/ssh-ctrl-%C -P 2222 -r"
+          BEHAVE_RC=0
+
+          $SSH "mkdir -p /tmp/ptyxis-smoke /tmp/results"
+          ${SCP} testsuite/smoke/. bluefin-test@127.0.0.1:/tmp/ptyxis-smoke/
+
+          $SSH "
+            set -e
+            source /tmp/session.env
+            podman run --rm \
+              --pid=host \
+              --privileged \
+              --network host \
+              -v /run/user/1001:/run/user/1001 \
+              -v /dev/uinput:/dev/uinput \
+              -v /tmp/ptyxis-smoke:/tmp/ptyxis-smoke:ro \
+              -v /tmp/results:/tmp/results \
+              -e DBUS_SESSION_BUS_ADDRESS=\"\${DBUS_SESSION_BUS_ADDRESS}\" \
+              -e WAYLAND_DISPLAY=\"\${WAYLAND_DISPLAY}\" \
+              -e XDG_RUNTIME_DIR=/run/user/1001 \
+              -e AT_SPI_BUS_ADDRESS=\"\${AT_SPI_BUS_ADDRESS}\" \
+              -e PYTHONPATH=/tmp/ptyxis-smoke \
+              ${RUNNER_IMAGE} \
+              'cd /tmp/ptyxis-smoke && behave features/ --no-capture \
+                --format json.pretty --outfile /tmp/results/results.json \
+                --format pretty --outfile /tmp/results/results.txt'
+          " || BEHAVE_RC=$?
+
+          mkdir -p results
+          scp -i /tmp/vm_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -o ControlPath=/tmp/ssh-ctrl-%C -P 2222 -r \
+            "bluefin-test@127.0.0.1:/tmp/results/." ./results/ 2>/dev/null || true
+
+          echo "behave_rc=${BEHAVE_RC}" >> "$GITHUB_OUTPUT"
+          [[ "${BEHAVE_RC}" != "0" ]] && cat results/results.txt 2>/dev/null || true
+          exit "${BEHAVE_RC}"
+
+      - name: Dump VM serial log
+        if: always()
+        run: |
+          echo "=== VM serial console output (tail) ==="
+          tail -200 vm-serial.log 2>/dev/null || echo "(no serial log)"
+
+      - name: Upload smoke results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-results
+          path: results/
+          if-no-files-found: warn

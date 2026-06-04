@@ -107,6 +107,46 @@ Feature: Ptyxis (ghostty-vt) smoke tests
     * Type text "echo focus_regression_ok" in "ptyxis"
     * Application "ptyxis" is running
 
+  # ── Custom profile ──────────────────────────────────────────────────────
+
+  @profile @preferences
+  Scenario: Custom profile can be created with a name
+    * Key combo: "<Control>comma"
+    * Wait until "Preferences" "dialog" appears in "ptyxis" within 5 seconds
+    * Navigate to "Profiles" page in "ptyxis" preferences
+    * Click "Add Profile" in "ptyxis"
+    * Wait until "Edit Profile" appears in "ptyxis" within 5 seconds
+    * Set profile name "CustomShellTest" in "ptyxis"
+    * Application "ptyxis" is running
+
+  @profile @preferences
+  Scenario: Custom profile can have a custom shell command set
+    * Key combo: "<Control>comma"
+    * Wait until "Preferences" "dialog" appears in "ptyxis" within 5 seconds
+    * Navigate to "Profiles" page in "ptyxis" preferences
+    * Click "Add Profile" in "ptyxis"
+    * Wait until "Edit Profile" appears in "ptyxis" within 5 seconds
+    * Set profile name "ShellCmdTest" in "ptyxis"
+    * Enable "Use Custom Command" in "ptyxis"
+    * Set custom command "/bin/sh" in "ptyxis"
+    * Application "ptyxis" is running
+
+  @profile @input
+  Scenario: Terminal accepts input after profile with custom command is configured
+    * Key combo: "<Control>comma"
+    * Wait until "Preferences" "dialog" appears in "ptyxis" within 5 seconds
+    * Navigate to "Profiles" page in "ptyxis" preferences
+    * Click "Add Profile" in "ptyxis"
+    * Wait until "Edit Profile" appears in "ptyxis" within 5 seconds
+    * Set profile name "InputTestShell" in "ptyxis"
+    * Enable "Use Custom Command" in "ptyxis"
+    * Set custom command "/bin/sh" in "ptyxis"
+    * Key combo: "Escape"
+    * Wait until "Preferences" "dialog" is gone from "ptyxis" within 5 seconds
+    * Focus terminal in "ptyxis"
+    * Type text "echo profile_input_ok" in "ptyxis"
+    * Application "ptyxis" is running
+
   # ── Clean shutdown ───────────────────────────────────────────────────────
 
   @shutdown

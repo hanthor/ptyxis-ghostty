@@ -256,6 +256,137 @@ def wait_until_gone(context, app_id, seconds):
     )
 
 
+# ── Custom profile ────────────────────────────────────────────────────────
+
+@step('Navigate to "{page}" page in "{app_id}" preferences')
+def navigate_to_prefs_page(context, page, app_id):
+    """Click the named page tab in the Preferences sidebar."""
+    app = getattr(context, app_id).instance
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        try:
+            tabs = app.findChildren(
+                lambda n: n.roleName in ("page tab", "tab", "list item", "label")
+                and page.lower() in (n.name or "").lower()
+            )
+            if tabs:
+                tabs[0].click()
+                return
+        except Exception:
+            pass
+        time.sleep(0.3)
+    raise AssertionError(f"Could not find {page!r} page tab in {app_id!r} preferences")
+
+
+@step('Click "Add Profile" in "{app_id}"')
+def click_add_profile(context, app_id):
+    """Click the Add Profile button row in the Profiles preferences page."""
+    app = getattr(context, app_id).instance
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        try:
+            btns = app.findChildren(
+                lambda n: n.roleName in ("push button", "list item", "button")
+                and "add profile" in (n.name or "").lower()
+            )
+            if btns:
+                btns[0].click()
+                return
+        except Exception:
+            pass
+        time.sleep(0.3)
+    raise AssertionError(f"Could not find 'Add Profile' button in {app_id!r}")
+
+
+@step('Wait until "{title}" appears in "{app_id}" within {seconds:d} seconds')
+def wait_for_title(context, title, app_id, seconds):
+    """Wait for any node whose name contains the given title substring."""
+    app = getattr(context, app_id).instance
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        try:
+            nodes = app.findChildren(
+                lambda n: title.lower() in (n.name or "").lower()
+            )
+            if nodes:
+                return
+        except Exception:
+            pass
+        time.sleep(0.3)
+    raise AssertionError(f"{title!r} did not appear in {app_id!r} within {seconds}s")
+
+
+@step('Set profile name "{name}" in "{app_id}"')
+def set_profile_name(context, name, app_id):
+    """Clear and type the given name into the profile Name entry row."""
+    app = getattr(context, app_id).instance
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        try:
+            entries = app.findChildren(
+                lambda n: n.roleName in ("text", "entry", "editable text")
+                and "name" in (n.name or "").lower()
+            )
+            if entries:
+                entry = entries[0]
+                entry.click()
+                # Select all and replace
+                import dogtail.rawinput
+                dogtail.rawinput.keyCombo("<Control>a")
+                dogtail.rawinput.typeText(name)
+                return
+        except Exception:
+            pass
+        time.sleep(0.3)
+    raise AssertionError(f"Could not find Name entry in {app_id!r} profile editor")
+
+
+@step('Enable "{switch_label}" in "{app_id}"')
+def enable_switch(context, switch_label, app_id):
+    """Find a switch/toggle by label and enable it (turn on if not already on)."""
+    app = getattr(context, app_id).instance
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        try:
+            switches = app.findChildren(
+                lambda n: n.roleName in ("check box", "toggle button", "switch")
+                and switch_label.lower() in (n.name or "").lower()
+            )
+            if switches:
+                sw = switches[0]
+                if not sw.checked:
+                    sw.click()
+                return
+        except Exception:
+            pass
+        time.sleep(0.3)
+    raise AssertionError(f"Could not find switch {switch_label!r} in {app_id!r}")
+
+
+@step('Set custom command "{command}" in "{app_id}"')
+def set_custom_command(context, command, app_id):
+    """Type the given command into the Custom Command entry row."""
+    app = getattr(context, app_id).instance
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        try:
+            entries = app.findChildren(
+                lambda n: n.roleName in ("text", "entry", "editable text")
+                and "custom command" in (n.name or "").lower()
+            )
+            if entries:
+                entry = entries[0]
+                entry.click()
+                import dogtail.rawinput
+                dogtail.rawinput.keyCombo("<Control>a")
+                dogtail.rawinput.typeText(command)
+                return
+        except Exception:
+            pass
+        time.sleep(0.3)
+    raise AssertionError(f"Could not find Custom Command entry in {app_id!r}")
+
+
 # ── Diagnostics ───────────────────────────────────────────────────────────
 
 @step('Dump AT-SPI tree of "{app_id}" to artifact')
